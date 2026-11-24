@@ -56,6 +56,7 @@ import {
   canViewDepartment,
   canViewReports,
   canViewUser,
+  inDept,
   isCompanyWide,
 } from "@/lib/permissions";
 import {
@@ -131,7 +132,7 @@ function reportPeople(db: Database, me: User, deptId?: string | null): User[] {
       u.active_status &&
       (u.role === "employee" || (u.role === "manager" && (wide || u.id === me.id))) &&
       canViewUser(me, u) &&
-      (!deptId || u.department_id === deptId),
+      (!deptId || inDept(u, deptId)),
   );
 }
 

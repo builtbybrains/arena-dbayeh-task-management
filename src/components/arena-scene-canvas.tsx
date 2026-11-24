@@ -283,11 +283,13 @@ export default function ArenaCanvas({
   selectedId,
   onSelect,
   ambient,
+  center = "Arena",
 }: {
   nodes: DepartmentNode[];
   selectedId?: string | null;
   onSelect?: (id: string) => void;
   ambient?: boolean;
+  center?: string;
 }) {
   const labels = useRef<Record<string, HTMLElement | null>>({});
   return (
@@ -312,7 +314,7 @@ export default function ArenaCanvas({
             }}
             className="display absolute top-0 left-0 text-xs tracking-[0.3em] whitespace-nowrap text-brand-soft opacity-0"
           >
-            Arena
+            {center}
           </span>
           {nodes.map((node) => {
             const on = node.id === selectedId;

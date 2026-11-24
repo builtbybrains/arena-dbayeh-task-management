@@ -2,8 +2,9 @@
 // file so translations stay next to the code that uses them.
 import { CORE } from "./core";
 import { MANAGER } from "./manager";
+import { MM } from "./mm";
 import { REPORTS } from "./reports";
 import { TASKS } from "./tasks";
 import { VENUE } from "./venue";
 
-export const AR: Record<string, string> = { ...CORE, ...MANAGER, ...TASKS, ...REPORTS, ...VENUE };
+export const AR: Record<string, string> = { ...CORE, ...MANAGER, ...TASKS, ...REPORTS, ...VENUE, ...MM };

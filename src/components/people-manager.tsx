@@ -9,8 +9,9 @@ import { Field } from "@/components/forms";
 import { Avatar, Btn, Chip, Empty, Panel } from "@/components/kit";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { t } from "@/lib/i18n";
+import { MAX_OWNERS } from "@/lib/business";
 import { canManagePerson } from "@/lib/permissions";
-import { actions, useApp, useDb, useMe } from "@/lib/store";
+import { actions, useApp, useDb, useFullDb, useMe } from "@/lib/store";
 import { ROLE_LABEL, ROLE_RANK, type Role, type User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -27,6 +28,7 @@ export function PeopleManager() {
   const [editing, setEditing] = useState<User | "new" | null>(null);
   const [showInactive, setShowInactive] = useState(false);
   const [newDept, setNewDept] = useState("");
+  const byId = useMemo(() => new Map(db.users.map((u) => [u.id, u])), [db.users]);
 
   const groups = useMemo(() => {
     const list = db.users.filter((u) => u.active_status !== showInactive);
@@ -103,6 +105,9 @@ export function PeopleManager() {
                         {(u.role === "manager" || u.role === "ops") && u.title !== ROLE_LABEL[u.role] ? ` · ${t(ROLE_LABEL[u.role])}` : ""}
                         {u.phone ? ` · ${u.phone}` : ""}
                       </p>
+                      {u.created_by && byId.get(u.created_by) && (
+                        <p className="mt-0.5 text-[11px] text-paper/40">{t("Added by {name}", { name: byId.get(u.created_by)!.name })}</p>
+                      )}
                     </div>
                     {!sample && !u.pin_hash && <span className="rounded-full bg-warn/15 px-2 py-0.5 text-[10px] font-bold text-warn uppercase">{t("No PIN")}</span>}
                     {canManagePerson(me, u) && (
@@ -130,8 +135,18 @@ function PersonForm({ person, onDone }: { person: User | null; onDone: () => voi
   const db = useDb();
   const me = useMe();
   const sample = useApp((s) => s.mode === "sample");
-  const roles: Role[] = (["ops", "manager", "employee"] as Role[]).filter((r) => me.role === "owner" || ROLE_RANK[r] > ROLE_RANK[me.role]);
+  const full = useFullDb();
+  const owners = db.users.filter((u) => u.role === "owner" && u.active_status).length;
+  // Owners can add more owners (up to four). Everyone else adds people below them.
+  const roles: Role[] = (["owner", "ops", "manager", "employee"] as Role[]).filter((r) =>
+    r === "owner" ? me.role === "owner" && !person : me.role === "owner" || ROLE_RANK[r] > ROLE_RANK[me.role],
+  );
   const hasOps = db.users.some((u) => u.role === "ops" && u.active_status && u.id !== person?.id);
+  // Owners can bring someone from Money Mondo into Arena; they keep their PIN.
+  const mmPeople =
+    me.role === "owner" && !person ? full.users.filter((u) => u.active_status && u.in_arena === false).sort((a, b) => a.name.localeCompare(b.name)) : [];
+  const [linkId, setLinkId] = useState("");
+  const linked = mmPeople.find((u) => u.id === linkId) ?? null;
   const [name, setName] = useState(person?.name ?? "");
   const [role, setRole] = useState<Role>(person?.role ?? (hasOps || me.role !== "owner" ? "employee" : "ops"));
   const [dept, setDept] = useState(person?.department_id ?? db.departments.find((d) => d.id !== "ops")?.id ?? "");
@@ -145,6 +160,18 @@ function PersonForm({ person, onDone }: { person: User | null; onDone: () => voi
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setBusy(true);
+    if (linked) {
+      const ok = actions.linkToArena(linked.id, {
+        role,
+        title,
+        department_id: role === "ops" || role === "owner" ? null : dept,
+        restaurant_id: dept === "restaurant" && role === "employee" && /waiter/i.test(title) ? (db.restaurants[0]?.id ?? null) : null,
+        phone: linked.phone ?? null,
+      });
+      setBusy(false);
+      if (ok) onDone();
+      return;
+    }
     const ok = await actions.savePerson({
       id: person?.id,
       name,
@@ -169,14 +196,41 @@ function PersonForm({ person, onDone }: { person: User | null; onDone: () => voi
         </DialogDescription>
       </div>
       <div className="space-y-4 p-5">
-        <Field label={t("Full name")} htmlFor="p-name">
-          <input id="p-name" className="field text-base font-semibold" value={name} onChange={(e) => setName(e.target.value)} required autoComplete="off" />
-        </Field>
+        {mmPeople.length > 0 && (
+          <Field label={t("Someone from Money Mondo")} htmlFor="p-link" hint={t("They keep their Money Mondo jobs and PIN, and switch between the two.")}>
+            <select
+              id="p-link"
+              className="field"
+              value={linkId}
+              onChange={(e) => {
+                setLinkId(e.target.value);
+                if (e.target.value && role === "owner") setRole("employee");
+              }}
+            >
+              <option value="">{t("No, a new person")}</option>
+              {mmPeople.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
+        {!linked && (
+          <Field label={t("Full name")} htmlFor="p-name">
+            <input id="p-name" className="field text-base font-semibold" value={name} onChange={(e) => setName(e.target.value)} required autoComplete="off" />
+          </Field>
+        )}
         {!isOwner && (
           <Field label={t("Position")}>
             <div className="flex flex-wrap gap-1.5">
               {roles.map((r) => (
-                <Chip key={r} active={role === r} onClick={() => setRole(r)} disabled={r === "ops" && hasOps}>
+                <Chip
+                  key={r}
+                  active={role === r}
+                  onClick={() => setRole(r)}
+                  disabled={(r === "ops" && hasOps) || (r === "owner" && (owners >= MAX_OWNERS || !!linked))}
+                >
                   {t(ROLE_LABEL[r])}
                 </Chip>
               ))}
@@ -200,7 +254,7 @@ function PersonForm({ person, onDone }: { person: User | null; onDone: () => voi
             className="field"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder={role === "manager" ? t("e.g. Playground Manager") : role === "ops" ? t("Operations Manager") : t("e.g. Waiter")}
+            placeholder={role === "manager" ? t("e.g. Playground Manager") : role === "ops" ? t("Operations Manager") : role === "owner" ? t("Owner") : t("e.g. Waiter")}
           />
           {role === "employee" && (TITLES[dept] ?? []).length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1.5">
@@ -212,7 +266,12 @@ function PersonForm({ person, onDone }: { person: User | null; onDone: () => voi
             </div>
           )}
         </Field>
-        <div className="grid grid-cols-2 gap-3">
+        {role === "owner" && !person && (
+          <p className="rounded-2xl border border-med/30 bg-med/8 p-3 text-xs text-paper/70">
+            {t("Owners see everything in Arena and Money Mondo. Up to {n} owners; {left} left.", { n: MAX_OWNERS, left: MAX_OWNERS - owners })}
+          </p>
+        )}
+        <div className={cn("grid grid-cols-2 gap-3", linked && "hidden")}>
           <Field label={t("Phone (optional)")} htmlFor="p-phone">
             <input id="p-phone" className="field" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
           </Field>
@@ -227,7 +286,7 @@ function PersonForm({ person, onDone }: { person: User | null; onDone: () => voi
                   maxLength={4}
                   value={pin}
                   onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                  required={!person}
+                  required={!person && !linked}
                   placeholder={person ? "••••" : ""}
                 />
               </div>
@@ -237,7 +296,7 @@ function PersonForm({ person, onDone }: { person: User | null; onDone: () => voi
         {!sample && !person && <p className="text-xs text-paper/50">{t("Write the PIN down for them, or let them type it in themselves.")}</p>}
       </div>
       <div className="sticky bottom-0 flex flex-wrap items-center gap-2 border-t border-white/10 bg-[#0b0f0d] p-4">
-        {person && !isOwner && person.id !== me.id && (
+        {person && (!isOwner || me.role === "owner") && person.id !== me.id && (
           <Btn
             variant={person.active_status ? "danger" : "ghost"}
             onClick={() => {
@@ -250,7 +309,11 @@ function PersonForm({ person, onDone }: { person: User | null; onDone: () => voi
         )}
         <div className={cn("ms-auto flex gap-2")}>
           <Btn onClick={onDone}>{t("Cancel")}</Btn>
-          <Btn variant="primary" type="submit" disabled={busy || name.trim().length < 2 || (!person && !sample && pin.length !== 4)}>
+          <Btn
+            variant="primary"
+            type="submit"
+            disabled={busy || (!linked && (name.trim().length < 2 || (!person && !sample && pin.length !== 4)))}
+          >
             {person ? t("Save") : t("Add person")}
           </Btn>
         </div>

@@ -2,7 +2,7 @@
 // and activity logs. Nothing is hard-coded.
 
 import { t as tr } from "./i18n";
-import { canViewTask, isCompanyWide } from "./permissions";
+import { canViewTask, inDept, isCompanyWide } from "./permissions";
 import { addDays, dateKey, dayStart, fmtDuration, MIN, ms } from "./time";
 import type {
   Database,
@@ -261,7 +261,7 @@ export function departmentTotals(db: Database, deptId: string, from: string, to:
 
 export function departmentSnapshot(db: Database, deptId: string, from: string, to: string, now: number): DepartmentSnapshot {
   const tasks = tasksInRange(db, from, to, (t) => t.department_id === deptId);
-  const people = db.users.filter((u) => u.department_id === deptId && u.active_status);
+  const people = db.users.filter((u) => inDept(u, deptId) && u.active_status);
   const employees = people
     .map((u) =>
       employeeRow(
@@ -364,7 +364,7 @@ export function departmentNodes(db: Database, now: number): DepartmentNode[] {
       id: d.id,
       name: d.name,
       short: d.short,
-      employees: db.users.filter((u) => u.department_id === d.id && u.active_status).length,
+      employees: db.users.filter((u) => inDept(u, d.id) && u.active_status).length,
       assigned: s.assigned,
       completed: s.completed,
       completion: s.completion_rate,

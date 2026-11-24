@@ -24,6 +24,7 @@ import {
   TrendingUp,
   User as UserIcon,
   Users,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 import { motion } from "motion/react";
@@ -36,24 +37,30 @@ import { TaskComposer } from "@/components/task-composer";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { WalkInQuick } from "@/components/walk-in-quick";
 import { setLang, t, useLang } from "@/lib/i18n";
-import { canAccessRoute, homeFor, isCompanyWide, navFor, type NavItem } from "@/lib/permissions";
+import { BUSINESS_NAME, businessesOf, jobsOf, jobTitle } from "@/lib/business";
+import { canAccessRoute, canLogWalkIn, homeFor, isCompanyWide, navFor, type NavItem } from "@/lib/permissions";
 import { useSync } from "@/lib/repository";
 import { notificationsFor, type AttentionItem } from "@/lib/selectors";
 import {
   actions,
   enableBrowserNotifications,
+  homeOf,
   leaveMode,
   resetDemo,
+  setBusiness,
   signOut,
   switchProfile,
   syncNow,
   useApp,
+  useBusiness,
   useDb,
+  useFullDb,
+  useMaybeMe,
   useMe,
   useNow,
 } from "@/lib/store";
 import { dateKey, fmtAgo, fmtKeyLong, fmtTime } from "@/lib/time";
-import type { User } from "@/lib/types";
+import type { Business, User } from "@/lib/types";
 import { closeDemo, openDemo, showOnBoard, useUi, type BoardQuick } from "@/lib/ui";
 import { dueReminders, type ReminderItem } from "@/lib/venue";
 import { cn } from "@/lib/utils";
@@ -74,6 +81,7 @@ const ICONS: Record<NavItem["icon"], LucideIcon> = {
   building: Building2,
   calendar: CalendarDays,
   door: DoorOpen,
+  wallet: Wallet,
 };
 
 const SHORT: Record<string, string> = {
@@ -94,7 +102,7 @@ const shortLabel = (label: string) => t(SHORT[label] ?? label);
 /** Gate + chrome for every signed-in screen. Access is checked here centrally. */
 export function AppShell({ children }: { children: ReactNode }) {
   const ready = useApp((s) => s.ready);
-  const me = useApp((s) => (s.db && s.userId ? (s.db.users.find((u) => u.id === s.userId) ?? null) : null));
+  const me = useMaybeMe();
   const switching = useApp((s) => s.switchingTo !== null);
   const mode = useApp((s) => s.mode);
   const pathname = usePathname();
@@ -104,7 +112,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!ready || switching) return;
     if (!me) router.replace("/");
-    else if (!allowed) router.replace(homeFor(me.role));
+    else if (!allowed) router.replace(homeFor(me));
   }, [ready, me, allowed, switching, router]);
 
   if (!ready || !me || !allowed) return <Loader />;
@@ -127,7 +135,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <MobileDock items={items} pathname={pathname} />
       {mode === "sample" ? <DemoControls /> : <AccountMenu />}
       <TaskComposer />
-      <WalkInQuick />
+      {canLogWalkIn(me) && <WalkInQuick />}
     </div>
   );
 }
@@ -142,10 +150,18 @@ function Dock({ items, pathname, me }: { items: NavItem[]; pathname: string; me:
       aria-label={t("Main")}
       className="no-print group/dock glass fixed top-1/2 start-4 z-40 hidden w-[60px] -translate-y-1/2 flex-col gap-1 overflow-hidden rounded-[28px] p-2 transition-[width] duration-300 ease-out focus-within:w-60 hover:w-60 md:flex"
     >
-      <Link href={homeFor(me.role)} className="mb-2 flex h-11 items-center gap-3 ps-0.5" aria-label={t("Arena OS home")}>
+      <Link href={homeFor(me)} className="mb-2 flex h-11 items-center gap-3 ps-0.5" aria-label={t("Arena OS home")}>
         <ArenaMark className="h-[18px] w-[44px] shrink-0 text-paper" />
         <span className={cn(label, "display text-base")}>
-          Arena <span className="text-brand">OS</span>
+          {me.business === "mm" ? (
+            <>
+              Money <span className="text-brand">Mondo</span>
+            </>
+          ) : (
+            <>
+              Arena <span className="text-brand">OS</span>
+            </>
+          )}
         </span>
       </Link>
       {items.map((item) => {
@@ -250,6 +266,7 @@ function TopBar({ me }: { me: User }) {
       <div className="pointer-events-auto flex min-w-0 items-center gap-3">
         <Logo compact className="sm:hidden" />
         <Logo className="hidden sm:flex md:hidden" />
+        <BusinessSwitch />
         <p className="hidden text-sm text-paper/55 md:block">
           <span className="font-semibold text-paper/85">{fmtKeyLong(dateKey(now))}</span>
           <span className="tnum mx-2 text-paper/30">·</span>
@@ -257,15 +274,17 @@ function TopBar({ me }: { me: User }) {
         </p>
       </div>
       <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-2">
-        <button
-          type="button"
-          onClick={() => useUi.setState({ walkIn: true })}
-          className="flex h-10 items-center gap-1.5 rounded-full bg-brand px-3 text-sm font-bold text-ink shadow-[0_8px_26px_-10px_rgb(34_199_63/80%)]"
-          aria-label={t("Log a walk-in")}
-        >
-          <DoorOpen className="size-4" />
-          <span className="hidden sm:inline">{t("Walk-in")}</span>
-        </button>
+        {canLogWalkIn(me) && (
+          <button
+            type="button"
+            onClick={() => useUi.setState({ walkIn: true })}
+            className="flex h-10 items-center gap-1.5 rounded-full bg-brand px-3 text-sm font-bold text-ink shadow-[0_8px_26px_-10px_rgb(34_199_63/80%)]"
+            aria-label={t("Log a walk-in")}
+          >
+            <DoorOpen className="size-4" />
+            <span className="hidden sm:inline">{t("Walk-in")}</span>
+          </button>
+        )}
         <LangToggle />
         <Alerts me={me} />
         {mode === "sample" ? (
@@ -295,6 +314,43 @@ function TopBar({ me }: { me: User }) {
         </button>
       </div>
     </header>
+  );
+}
+
+/**
+ * Arena / Money Mondo, for the owners and anyone who works in both. Everyone
+ * else never sees it, so Arena staff do not know Money Mondo is there.
+ */
+function BusinessSwitch({ className }: { className?: string }) {
+  const full = useFullDb();
+  const userId = useApp((s) => s.userId);
+  const biz = useBusiness();
+  const router = useRouter();
+  const person = userId ? full.users.find((u) => u.id === userId) : undefined;
+  const list = person ? businessesOf(person) : [];
+  if (list.length < 2) return null;
+  const go = (b: Business) => {
+    if (b === biz) return;
+    setBusiness(b);
+    router.push(homeOf(userId!));
+  };
+  return (
+    <div className={cn("glass inline-flex shrink-0 rounded-full p-1", className)} role="group" aria-label={t("Business")}>
+      {list.map((b) => (
+        <button
+          key={b}
+          type="button"
+          onClick={() => go(b)}
+          aria-pressed={b === biz}
+          className={cn(
+            "rounded-full px-2.5 py-1 text-xs font-bold whitespace-nowrap sm:px-3 sm:text-sm",
+            b === biz ? (b === "mm" ? "bg-med text-ink" : "bg-brand text-ink") : "text-paper/65",
+          )}
+        >
+          {BUSINESS_NAME[b]}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -376,6 +432,7 @@ function AccountMenu() {
               ))}
             </div>
           </Row>
+          <BusinessRow />
           <Row icon={<BellRing className="size-4" />} label={t("Phone notifications")}>
             {notif === "granted" ? (
               <span className="text-sm font-semibold text-brand">{t("On")}</span>
@@ -415,6 +472,18 @@ function AccountMenu() {
   );
 }
 
+function BusinessRow() {
+  const full = useFullDb();
+  const userId = useApp((s) => s.userId);
+  const person = userId ? full.users.find((u) => u.id === userId) : undefined;
+  if (!person || businessesOf(person).length < 2) return null;
+  return (
+    <Row icon={<Building2 className="size-4" />} label={t("Business")}>
+      <BusinessSwitch />
+    </Row>
+  );
+}
+
 function Row({ icon, label, children }: { icon: ReactNode; label: string; children: ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/8 bg-white/[0.03] px-3 py-2.5">
@@ -434,16 +503,26 @@ function DemoControls() {
   const router = useRouter();
   const [confirm, setConfirm] = useState(false);
 
+  const full = useFullDb();
+  const biz = useBusiness();
+
+  // Arena people by department, then Money Mondo people (who open Money Mondo).
   const groups = useMemo(() => {
-    const exec = db.users.filter((u) => u.role === "owner" || u.role === "ops");
+    const arena = full.users.filter((u) => u.in_arena !== false);
+    const exec = arena.filter((u) => u.role === "owner" || u.role === "ops");
+    const mmPeople = full.users.filter((u) => u.role !== "owner" && (u.mm_jobs?.length ?? 0) > 0);
     return [
-      { label: t("Leadership"), users: exec },
-      ...db.departments.map((d) => ({
-        label: t(d.name),
-        users: db.users.filter((u) => u.department_id === d.id).sort((a, b) => (a.role === "manager" ? -1 : b.role === "manager" ? 1 : 0)),
-      })),
-    ];
-  }, [db.users, db.departments]);
+      { label: t("Leadership"), business: "arena" as Business, users: exec },
+      ...db.departments
+        .filter((d) => !d.id.startsWith("mm_"))
+        .map((d) => ({
+          label: t(d.name),
+          business: "arena" as Business,
+          users: arena.filter((u) => u.department_id === d.id).sort((a, b) => (a.role === "manager" ? -1 : b.role === "manager" ? 1 : 0)),
+        })),
+      { label: "Money Mondo", business: "mm" as Business, users: mmPeople },
+    ].filter((g) => g.users.length > 0);
+  }, [full.users, db.departments]);
 
   return (
     <Dialog
@@ -479,11 +558,13 @@ function DemoControls() {
                     type="button"
                     onClick={() => {
                       closeDemo();
-                      if (u.id !== me.id) switchProfile(u.id);
+                      if (u.id === me.id && g.business === biz) return;
+                      setBusiness(g.business);
+                      switchProfile(u.id);
                     }}
                     className={cn(
                       "flex items-center gap-2.5 rounded-2xl border p-2 text-start transition",
-                      u.id === me.id
+                      u.id === me.id && g.business === biz
                         ? "border-brand/60 bg-brand/12"
                         : "border-white/8 bg-white/[0.03] hover:border-white/25 hover:bg-white/[0.07]",
                     )}
@@ -492,7 +573,9 @@ function DemoControls() {
                     <span className="min-w-0 leading-tight">
                       <span className="block truncate text-sm font-semibold">{u.name}</span>
                       <span className="block truncate text-[11px] text-paper/55">
-                        {u.id === me.id ? t("Current profile") : t(u.title)}
+                        {u.id === me.id && g.business === biz
+                          ? t("Current profile")
+                          : t(g.business === "mm" ? jobTitle(jobsOf(u)) : u.title)}
                       </span>
                     </span>
                   </button>

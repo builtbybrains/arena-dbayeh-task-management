@@ -2,7 +2,7 @@
 
 Built by **Brains AI Solutions**.
 
-Arena OS runs on everyone's phone. The Owner hands work to the Operations Manager, who passes it on to the Restaurant and Playground managers and their teams. Everyone sees the event calendar, gets reminders, and logs walk-ins at the door. The Owner sees date-range reports on tasks, events, walk-ins and revenue.
+Arena OS runs on everyone's phone. It holds two businesses: **Arena** (the venue) and **Money Mondo** (a separate business only its own people and the owners can see). At Arena, the owners hand work to the Operations Manager, who passes it on to the Restaurant and Playground managers and their teams. Everyone sees the event calendar, gets reminders, and logs walk-ins at the door. The Owner sees date-range reports on tasks, events, walk-ins and revenue.
 
 It has two modes, chosen on the first screen:
 
@@ -17,12 +17,35 @@ Language: English or Arabic (right-to-left) from the **ع / EN** button, per pho
 
 | Position | Sees | Can do |
 | --- | --- | --- |
-| **Owner** | Everything, including revenue | Assign to the Operations Manager (the default) or anyone directly · add people and set PINs · book events · all reports · erase the workspace |
-| **Operations Manager** | The whole venue, including revenue | Pass tasks to managers and staff · add people below them · book events · recurring tasks · submits the daily venue report |
+| **Owners** (up to 4, all equal) | Everything in Arena and Money Mondo, including revenue and money | Assign to the Operations Manager / Mall Manager (the default) or anyone directly · add people (and other owners) and set PINs · book events · all reports · erase the workspace |
+| **Operations Manager** | The whole venue, including revenue. Nothing of Money Mondo | Pass tasks to managers and staff · add people below them (staff and department managers) · book events · recurring tasks · submits the daily venue report |
 | **Restaurant / Playground Manager** | Their department | Assign tasks to their team · book events · enter restaurant sales · recurring tasks · submits the daily department report |
 | **Staff** (waiters, cooks, attendants, cashier, maintenance…) | Their own tasks, the calendar | Start / pause / complete tasks · log walk-ins · set reminders for themselves |
 
-The Operations Manager runs the **Operations** department (cleaning, maintenance, drivers). Restaurant and Playground each have their own manager. The Owner can add more departments.
+The Operations Manager runs the **Operations** department (cleaning, maintenance, drivers). Restaurant and Playground each have their own manager. The Owner can add more departments. The People list shows who added each person.
+
+## Money Mondo
+
+A second business in the same workspace. Arena staff and the Operations Manager never see it; the owners (and anyone who works in both) switch with the **Arena / Money Mondo** pill at the top.
+
+| Position | Sees | Can do |
+| --- | --- | --- |
+| **Owners** | All of Money Mondo | Give tasks to anyone · add people with any jobs · bring someone over from Arena (same PIN) |
+| **Mall Manager** | All of Money Mondo, all money | Give tasks to the OMT Manager and every job (Sales, OMT, Money Collectors, Group Agents, BB) · add staff and the OMT Manager |
+| **OMT Manager** | The OMT team, OMT money | Give tasks to every OMT Operator · add OMT Operators |
+| **Staff** | Their own tasks and the money they enter | Start / pause / complete tasks · enter their money |
+
+Jobs: **OMT Operator, Sales, Money Collector, Group Agent, BB**, plus the two manager jobs. A person can hold several (e.g. OMT Operator + Group Agent) and shows in each team. A manager can also hold staff jobs. One location, so one Mall Manager and one OMT Manager.
+
+**Money** screen (amounts in dollars and lira, always kept apart):
+
+- **Pickups**: a money collector logs each pickup (amount, where from, time) and hands it to someone (usually the Mall Manager), who confirms "I received it". Anything not confirmed shows as "Not settled yet".
+- **Daily cash**: end-of-day cash per counter (OMT, Sales, BB).
+- **OMT transfers**: per operator per day, how many sent / received and their value.
+- **Expenses**: amount, what for, and optionally which counter paid it.
+- **Summary** (owners, Mall Manager; OMT Manager for OMT money): any date range, export to CSV.
+
+How it is built: `src/lib/business.ts` gives every screen a *view* of the data for one business. Money Mondo's people are mapped onto the same chain of command the screens already use (Mall Manager = whole business, OMT Manager = the OMT team, each job = a team), so tasks, timers, alerts, reports and recurring tasks all work there unchanged. Writes are merged back into the shared data.
 
 ## What it does
 
@@ -87,7 +110,7 @@ The D1 database is `arena-dbayeh`; its tables are in `worker/schema.sql`.
 
 The screens never touch storage directly. To move:
 
-1. **Tables**: one per collection in `src/lib/types.ts` (`users`, `departments`, `tasks`, `task_time_sessions`, `task_activity_logs`, `events`, `walkins`, `revenue`, `reminders`, `recurring`, `daily_reports`, `executive_reports`). Field names are already in database style.
+1. **Tables**: one per collection in `src/lib/types.ts` (`users`, `departments`, `tasks`, `task_time_sessions`, `task_activity_logs`, `events`, `walkins`, `revenue`, `reminders`, `recurring`, `daily_reports`, `executive_reports`, `mm_pickups`, `mm_cash`, `mm_transfers`, `mm_expenses`). Field names are already in database style.
 2. **Persistence**: write a third `DataRepository` in `src/lib/repository.ts`. The `diff()` there already turns every action into the exact rows that changed.
 3. **Import**: read the current records from D1 (`SELECT c, id, d FROM records`) and insert them into the new tables.
 4. **Auth**: replace name + PIN with Supabase Auth, and copy the rules in `src/lib/permissions.ts` into row-level security.
@@ -100,6 +123,9 @@ src/lib/types.ts          entities: people, tasks, events, walk-ins, revenue, re
 src/lib/permissions.ts    who can see and do what, and each position's navigation
 src/lib/engine.ts         task writes: validation, state changes, activity log
 src/lib/venue-engine.ts   events, walk-ins, revenue, reminders, recurring tasks, people
+src/lib/business.ts       Arena / Money Mondo views of the data, Money Mondo jobs and teams
+src/lib/mm-engine.ts      Money Mondo people (jobs) and money writes
+src/lib/money.ts          Money Mondo money: who sees what, totals
 src/lib/selectors.ts      task numbers
 src/lib/venue.ts          calendar busy levels, walk-in and revenue totals, reminders, date reports
 src/lib/repository.ts     sample storage and the cloud sync

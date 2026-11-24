@@ -14,6 +14,7 @@ import {
   isBeneath,
   remindableUsers,
 } from "./permissions";
+import { MAX_OWNERS } from "./business";
 import { idx } from "./selectors";
 import { addDays, beirutToUtc, dateKey, iso, ms } from "./time";
 import type {
@@ -110,7 +111,7 @@ export interface PersonInput {
 
 /** Who a person reports to, from their role and department. */
 function managerFor(db: Database, role: Role, deptId: string | null, selfId: string): string | null {
-  const owner = db.users.find((u) => u.role === "owner");
+  const owner = db.users.find((u) => u.role === "owner" && u.active_status) ?? db.users.find((u) => u.role === "owner");
   const ops = db.users.find((u) => u.role === "ops" && u.active_status && u.id !== selfId);
   if (role === "owner") return null;
   if (role === "ops") return owner?.id ?? null;
@@ -142,7 +143,12 @@ export function savePerson(db: Database, actor: User, now: number, input: Person
   if (actor.role !== "owner" && ROLE_RANK[input.role] <= ROLE_RANK[actor.role]) fail("You can only add people below you.");
   const name = input.name.trim();
   if (name.length < 2) fail("Enter a name.");
-  if (input.role === "owner" && existing?.role !== "owner") fail("There is only one Owner.");
+  if (input.role === "owner" && existing?.role !== "owner") {
+    if (actor.role !== "owner") fail("Only an owner can add an owner.");
+    if (db.users.filter((u) => u.role === "owner" && u.active_status).length >= MAX_OWNERS) fail("There can be at most 4 owners.");
+    if (existing?.mm_jobs?.length) fail("Take this person out of Money Mondo first. Owners see all of it anyway.");
+  }
+  if (existing?.role === "owner" && input.role !== "owner") fail("An owner stays an owner. Deactivate them instead.");
   const dept = input.role === "ops" || input.role === "owner" ? null : input.department_id;
   if ((input.role === "manager" || input.role === "employee") && !dept) fail("Choose a department.");
   if (input.role === "manager" && dept === "ops") fail("The Operations Manager runs Operations. Pick Restaurant or Playground.");
@@ -184,6 +190,7 @@ export function savePerson(db: Database, actor: User, now: number, input: Person
       pin_hash: input.pin_hash ?? null,
       phone: input.phone?.trim() || null,
       created_at: iso(now),
+      created_by: actor.id,
     };
     users = [...db.users, person];
   }
@@ -195,6 +202,10 @@ export function setPersonActive(db: Database, actor: User, userId: string, activ
   if (!u) fail("This person no longer exists.");
   if (u!.id === actor.id) fail("You cannot deactivate yourself.");
   if (!canManagePerson(actor, u!)) fail("You are not allowed to manage this person.");
+  if (!active && u!.role === "owner" && !db.users.some((x) => x.role === "owner" && x.active_status && x.id !== userId))
+    fail("The last owner cannot be deactivated.");
+  if (active && u!.role === "owner" && db.users.filter((x) => x.role === "owner" && x.active_status).length >= MAX_OWNERS)
+    fail("There can be at most 4 owners.");
   if (active && u!.role === "manager" && db.users.some((x) => x.role === "manager" && x.department_id === u!.department_id && x.active_status))
     fail("This department already has an active manager.");
   return rewire({ ...db, users: db.users.map((x) => (x.id === userId ? { ...x, active_status: active } : x)) });

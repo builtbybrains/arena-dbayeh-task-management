@@ -5,9 +5,10 @@ import { useMemo, useState } from "react";
 import { ActivityFeed } from "@/components/activity";
 import { EmployeeCard } from "@/components/department";
 import { Chip, Empty, PageHeader, Panel, Segmented } from "@/components/kit";
+import { MmPeopleManager } from "@/components/mm-people";
 import { PeopleManager } from "@/components/people-manager";
 import { t } from "@/lib/i18n";
-import { canManagePeople, canViewUser, isCompanyWide } from "@/lib/permissions";
+import { canManagePeople, canViewUser, inDept, isCompanyWide } from "@/lib/permissions";
 import { employeeToday } from "@/lib/selectors";
 import { useDb, useMe, useNow } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -45,7 +46,7 @@ export default function TeamPage() {
     const needle = q.trim().toLowerCase();
     const base = rows.filter(
       (r) =>
-        (!dept || r.user.department_id === dept) &&
+        (!dept || inDept(r.user, dept)) &&
         (!needle || `${r.user.name} ${r.user.title}`.toLowerCase().includes(needle)),
     );
     const is = (s: Status, r: (typeof rows)[number]) =>
@@ -65,7 +66,9 @@ export default function TeamPage() {
         title={tab === "people" ? t("People and PINs") : t("Who is doing what, right now")}
         sub={
           tab === "people"
-            ? t("Add the team, give each person a position, a department and a PIN to sign in with.")
+            ? me.business === "mm"
+              ? t("Add the team, give each person their jobs and a PIN to sign in with.")
+              : t("Add the team, give each person a position, a department and a PIN to sign in with.")
             : t("Live status for each person, their queue and what they are working on.")
         }
       >
@@ -82,7 +85,7 @@ export default function TeamPage() {
         )}
       </PageHeader>
       {tab === "people" ? (
-        <PeopleManager />
+        me.business === "mm" ? <MmPeopleManager /> : <PeopleManager />
       ) : (
         <>
 

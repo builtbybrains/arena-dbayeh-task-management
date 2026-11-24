@@ -7,7 +7,9 @@ import { MANAGER_TEMPLATES, TEMPLATES, type TaskTemplate } from "./templates";
 import { addDays, beirutToUtc, dateKey, dayEnd, dayStart, iso, MIN } from "./time";
 import type {
   ActivityAction,
+  Business,
   Database,
+  MmJob,
   Department,
   Priority,
   RecurringTask,
@@ -22,7 +24,10 @@ import type {
   WalkIn,
 } from "./types";
 
+/** Shape of the shared workspace data. Older copies are upgraded in place (repository.normalize). */
 export const DB_VERSION = 3;
+/** Sample data is rebuilt whenever this changes. */
+export const SAMPLE_VERSION = 4;
 const HOUR = 60 * MIN;
 
 function rng(seed: number) {
@@ -135,6 +140,12 @@ export function buildSeed(nowMs: number): Database {
     return u;
   };
   const owner = addUser("u_owner", "Alex Haddad", "owner", "Owner", null, null);
+  // Four owners share Arena and Money Mondo.
+  const coOwners = [
+    addUser("u_owner_2", "Nadim Aoun", "owner", "Owner", null, null),
+    addUser("u_owner_3", "Rana Sfeir", "owner", "Owner", null, null),
+    addUser("u_owner_4", "Karim Bou Saab", "owner", "Owner", null, null),
+  ];
   const gm = addUser("m_ops", "Rami Nassar", "ops", "Operations Manager", null, owner.id);
   const departments: Department[] = [];
   const staff: User[] = [];
@@ -292,7 +303,7 @@ export function buildSeed(nowMs: number): Database {
   }
 
   const db: Database = {
-    version: DB_VERSION,
+    version: SAMPLE_VERSION,
     seeded_at: iso(now),
     workspace: { id: "workspace", name: "Arena Dbayeh", created_at: joined, created_by: owner.id, walkin_price_kid: 10, walkin_price_adult: 0 },
     users,
@@ -308,6 +319,10 @@ export function buildSeed(nowMs: number): Database {
     revenue: [],
     reminders: [],
     recurring: [],
+    mm_pickups: [],
+    mm_cash: [],
+    mm_transfers: [],
+    mm_expenses: [],
   };
   seedVenue(db, now, rand, id, { owner, ops: gm, managers, staff });
 
@@ -329,13 +344,18 @@ export function buildSeed(nowMs: number): Database {
     log(null, gm.id, "report_submitted", at, null, "executive");
   }
 
+  seedMoneyMondo(db, now, rand, id, [owner, ...coOwners]);
+
   logs.sort((a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0));
   return db;
 }
 
 /** The profiles offered on the sample-data login screen. */
-export const DEMO_PROFILES: { userId: string; label: string }[] = [
+export const DEMO_PROFILES: { userId: string; label: string; business?: Business }[] = [
   { userId: "u_owner", label: "Owner" },
+  { userId: "mm_mall", label: "Mall Manager", business: "mm" },
+  { userId: "mm_omtm", label: "OMT Manager", business: "mm" },
+  { userId: "mm_omt_2", label: "OMT Operator", business: "mm" },
   { userId: "m_ops", label: "Operations Manager" },
   { userId: "m_restaurant", label: "Restaurant Manager" },
   { userId: "m_playground", label: "Playground Manager" },
@@ -475,4 +495,174 @@ function seedVenue(
     { id: id("r"), title: "Call the inflatable supplier about the repair", note: "Ask for the quote by Friday.", at: iso(now - 25 * MIN), for_user_ids: [who.ops.id], created_by: who.owner.id, event_id: null, done_by: [], created_at: iso(now - 3 * HOUR), deleted_at: null },
     { id: id("r"), title: "Count the entry desk cash", note: "", at: iso(beirutToUtc(today, 22, 0)), for_user_ids: [play.id], created_by: play.id, event_id: null, done_by: [], created_at: iso(now - 5 * HOUR), deleted_at: null },
   );
+}
+
+// --- Money Mondo ------------------------------------------------------------------
+
+type MmPerson = [id: string, name: string, jobs: MmJob[]];
+const MM_PEOPLE: MmPerson[] = [
+  ["mm_mall", "Hiba Mansour", ["mall_manager"]],
+  ["mm_omtm", "Tarek Daou", ["omt_manager", "omt"]],
+  ["mm_omt_1", "Maya Rizk", ["omt"]],
+  ["mm_omt_2", "Joseph Nader", ["omt", "group"]],
+  ["mm_omt_3", "Lara Fakhoury", ["omt"]],
+  ["mm_sales_1", "Sami Chidiac", ["sales"]],
+  ["mm_sales_2", "Celine Abi Nader", ["sales", "bb"]],
+  ["mm_coll_1", "Fouad Hayek", ["collector"]],
+  ["mm_group_1", "Ghassan Tabet", ["group"]],
+  ["mm_bb_1", "Nadine Karam", ["bb"]],
+];
+
+const MM_TEMPLATES: Record<string, TaskTemplate[]> = {
+  mm_omt: [
+    { title: "Reconcile the OMT till", description: "Count the drawer and match it with the system before the shift ends.", est: 20, category: "Cash" },
+    { title: "Call back customers waiting for transfers", description: "Phone everyone whose transfer arrived and has not been picked up.", est: 25, category: "Customers" },
+    { title: "Restock receipt paper and forms", description: "Check the printer rolls and the transfer forms at every window.", est: 10, category: "Supplies" },
+    { title: "Send the morning transfers summary", description: "Count of transfers sent and received since opening, to the OMT Manager.", est: 15, category: "Reporting" },
+  ],
+  mm_sales: [
+    { title: "Follow up yesterday's leads", description: "Call back everyone who asked for prices yesterday.", est: 30, category: "Sales" },
+    { title: "Update the price board", description: "Put today's rates on the board at the entrance.", est: 10, category: "Sales" },
+    { title: "Arrange the display stand", description: "Tidy the stand and refill the brochures.", est: 15, category: "Store" },
+  ],
+  mm_collect: [
+    { title: "Morning collection round", description: "Collect from the agents on the morning list and log every pickup.", est: 90, category: "Collection" },
+    { title: "Hand today's cash to the Mall Manager", description: "Hand over everything collected and get it confirmed in the app.", est: 15, category: "Collection" },
+  ],
+  mm_group: [
+    { title: "Confirm this week's group payouts", description: "Call each group member and confirm the payout date.", est: 40, category: "Groups" },
+    { title: "Visit the new group members", description: "Meet the two new members and collect their papers.", est: 60, category: "Groups" },
+  ],
+  mm_bb: [
+    { title: "Process today's BB requests", description: "Go through the requests that came in this morning.", est: 35, category: "BB" },
+    { title: "Prepare the BB daily summary", description: "Totals for the day, ready before closing.", est: 15, category: "BB" },
+  ],
+};
+
+const TEAM_OF: Partial<Record<MmJob, string>> = { omt: "mm_omt", sales: "mm_sales", collector: "mm_collect", group: "mm_group", bb: "mm_bb" };
+
+function seedMoneyMondo(db: Database, now: number, rand: () => number, id: (p: string) => string, owners: User[]) {
+  const today = dateKey(now);
+  const between = (a: number, b: number) => a + rand() * (b - a);
+  const pick = <T,>(arr: T[]): T => arr[Math.floor(rand() * arr.length)];
+  const round = (n: number, to: number) => Math.round(n / to) * to;
+  const joined = iso(dayStart(today) - 200 * 24 * 60 * MIN);
+  const people = MM_PEOPLE.map(([uid, name, jobs], n): User => ({
+    id: uid, name, role: "employee", title: "Money Mondo", department_id: null, manager_id: null, restaurant_id: null,
+    avatar: String((n * 53 + 20) % 360), active_status: true, pin_hash: null, phone: null, created_at: joined, created_by: owners[0].id, in_arena: false, mm_jobs: jobs,
+  }));
+  db.users.push(...people);
+  // Someone who works in both: the playground's entry desk cashier also does sales at Money Mondo.
+  const both = db.users.find((u) => u.id === "e_playground_3");
+  if (both) both.mm_jobs = ["sales"];
+
+  const mall = people[0];
+  const omtMgr = people[1];
+  const byJob = (job: MmJob) => db.users.filter((u) => u.mm_jobs?.includes(job));
+  const log = (task_id: string | null, actor_id: string, action: ActivityAction, at: number, prev: string | null = null, next: string | null = null) =>
+    db.logs.push({ id: id("l"), task_id, actor_id, action, previous_value: prev, new_value: next, created_at: iso(at) });
+
+  const add = (team: string, to: User, by: User, tpl: TaskTemplate, slot: "done" | "running" | "pending" | "overdue" | "paused", day = today) => {
+    const tid = id("t");
+    const S = dayStart(day);
+    const base = day === today ? now : dayEnd(day) - 60 * MIN;
+    const created = Math.min(S + between(7.5, 9) * 60 * MIN, base - 30 * MIN);
+    let due = base + between(40, 300) * MIN;
+    let status: Task["status"] = "pending";
+    let completed: number | null = null;
+    if (slot === "done") {
+      completed = Math.min(base - between(10, 200) * MIN, base - MIN);
+      completed = Math.max(completed, created + (tpl.est + 5) * MIN);
+      due = completed + between(10, 90) * MIN;
+      status = "completed";
+      db.sessions.push({ id: id("s"), task_id: tid, employee_id: to.id, started_at: iso(completed - tpl.est * MIN), ended_at: iso(completed), duration_seconds: tpl.est * 60 });
+    } else if (slot === "running") {
+      const start = now - between(5, Math.max(6, tpl.est * 0.8)) * MIN;
+      db.sessions.push({ id: id("s"), task_id: tid, employee_id: to.id, started_at: iso(start), ended_at: null, duration_seconds: 0 });
+      status = "in_progress";
+    } else if (slot === "paused") {
+      const end = now - between(10, 30) * MIN;
+      db.sessions.push({ id: id("s"), task_id: tid, employee_id: to.id, started_at: iso(end - 8 * MIN), ended_at: iso(end), duration_seconds: 8 * 60 });
+      status = "paused";
+    } else if (slot === "overdue") {
+      due = now - between(20, 90) * MIN;
+    }
+    db.tasks.push({
+      id: tid, title: tpl.title, description: tpl.description, department_id: team, assigned_by: by.id, assigned_to: to.id, priority: slot === "overdue" ? "high" : pick<Priority>(["high", "medium", "medium", "low"]),
+      status, due_at: iso(due), estimated_duration: tpl.est, category: tpl.category, internal_notes: null, completion_note: null, created_at: iso(created),
+      updated_at: iso(completed ?? created), completed_at: completed === null ? null : iso(completed), display_order: null, deleted_at: null, event_id: null, recurring_id: null,
+    });
+    log(tid, by.id, "assigned", created, null, to.id);
+    for (const s of db.sessions.filter((x) => x.task_id === tid)) {
+      log(tid, to.id, "started", Date.parse(s.started_at));
+      if (s.ended_at && status !== "completed") log(tid, to.id, "paused", Date.parse(s.ended_at));
+    }
+    if (completed !== null) log(tid, to.id, "completed", completed);
+  };
+
+  // Today: every person gets a small queue in each of their teams.
+  const slots: ("done" | "running" | "pending" | "overdue" | "paused")[] = ["done", "running", "pending", "pending", "overdue", "paused"];
+  let n = 0;
+  for (const u of db.users) {
+    if (!u.mm_jobs || u.role === "owner") continue;
+    for (const job of u.mm_jobs) {
+      const team = TEAM_OF[job];
+      if (!team) continue;
+      const by = team === "mm_omt" && u.id !== omtMgr.id ? omtMgr : mall;
+      const pool = MM_TEMPLATES[team];
+      const running = new Set<string>();
+      pool.slice(0, 3).forEach((tpl, k) => {
+        let slot = slots[(n + k) % slots.length];
+        if (slot === "running" && running.has(u.id)) slot = "pending";
+        if (slot === "running") running.add(u.id);
+        add(team, u, by, tpl, slot);
+      });
+      n++;
+      // A week of finished work, for the reports.
+      for (let d = 7; d >= 1; d--) add(team, u, by, pick(pool), "done", addDays(today, -d));
+    }
+  }
+  add("mm_omt", omtMgr, mall, { title: "Check every operator's till before closing", description: "Walk the windows and sign off each till.", est: 30, category: "Cash" }, "pending");
+  add("mm_sales", mall, owners[0], { title: "Weekly cash review with the owners", description: "Totals per counter, pickups and expenses for the week.", est: 45, category: "Management" }, "pending");
+
+  // Money: daily cash per counter, OMT transfers, pickups and expenses for two weeks.
+  const operators = byJob("omt");
+  const collector = byJob("collector")[0];
+  for (let d = 14; d >= 0; d--) {
+    const day = addDays(today, -d);
+    const closed = d > 0;
+    const at = dayStart(day) + 21 * 60 * MIN;
+    if (closed) {
+      db.mm_cash.push(
+        { id: `${day}_omt`, date: day, counter: "omt", usd: round(between(2500, 6000), 10), lbp: round(between(15, 60), 1) * 1_000_000, note: "", entered_by: omtMgr.id, updated_at: iso(at) },
+        { id: `${day}_sales`, date: day, counter: "sales", usd: round(between(400, 1500), 10), lbp: round(between(2, 12), 1) * 1_000_000, note: "", entered_by: mall.id, updated_at: iso(at) },
+        { id: `${day}_bb`, date: day, counter: "bb", usd: round(between(150, 700), 10), lbp: round(between(1, 6), 1) * 1_000_000, note: "", entered_by: mall.id, updated_at: iso(at) },
+      );
+    }
+    for (const op of operators) {
+      if (!closed && op.id !== omtMgr.id && rand() < 0.5) continue;
+      const sent = Math.round(between(8, 30));
+      const received = Math.round(between(10, 40));
+      db.mm_transfers.push({
+        id: `${day}_${op.id}`, date: day, operator_id: op.id, sent_count: sent, sent_usd: round(sent * between(120, 260), 10), sent_lbp: round(between(0, 8), 1) * 1_000_000,
+        received_count: received, received_usd: round(received * between(150, 320), 10), received_lbp: round(between(0, 10), 1) * 1_000_000, note: "", entered_by: op.id, updated_at: iso(closed ? at : now - 30 * MIN),
+      });
+    }
+    const rounds = closed ? 3 : 2;
+    for (let r = 0; r < rounds; r++) {
+      const pickedAt = dayStart(day) + (10 + r * 3) * 60 * MIN;
+      if (pickedAt > now - 10 * MIN) continue;
+      const handed = closed || r === 0;
+      db.mm_pickups.push({
+        id: id("pk"), at: iso(pickedAt), collector_id: collector.id, amount: round(between(300, 2500), 10), currency: rand() < 0.75 ? "USD" : "LBP", source: pick(["Jounieh agent", "Zalka agent", "Antelias shop", "Dbayeh branch", "Kaslik agent"]), note: "",
+        handed_to: handed ? mall.id : null, handed_at: handed ? iso(pickedAt + 2 * 60 * MIN) : null, confirmed_at: handed && (closed || rand() < 0.5) ? iso(pickedAt + 2.2 * 60 * MIN) : null,
+        logged_by: collector.id, deleted_at: null,
+      });
+    }
+    if (d % 3 === 0) {
+      db.mm_expenses.push({ id: id("ex"), date: day, amount: round(between(10, 60), 5), currency: "USD", category: pick(["Stationery", "Cleaning", "Fuel for collection", "Snacks for staff"]), note: "", counter: pick(["omt", "sales", null]), logged_by: pick([mall.id, omtMgr.id]), at: iso(dayStart(day) + 15 * 60 * MIN), deleted_at: null });
+    }
+  }
+  // A pickup is the LBP amount in full lira; keep it realistic.
+  for (const p of db.mm_pickups) if (p.currency === "LBP") p.amount = Math.round(p.amount / 10) * 1_000_000;
 }

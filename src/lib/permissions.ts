@@ -2,8 +2,16 @@
 // these helpers, so hiding a button is never the only protection. In production
 // the same rules belong in Supabase row-level security.
 
-import type { Database, Role, Task, User, WalkIn } from "./types";
+import type { Database, MmCounter, MmExpense, MmPickup, Role, Task, User, WalkIn } from "./types";
 import { ROLE_RANK } from "./types";
+
+/** A person on the Money Mondo view (see business.ts). */
+export const isMm = (u: User) => u.business === "mm";
+const hasJob = (u: User, job: NonNullable<User["mm_jobs"]>[number]) => !!u.mm_jobs?.includes(job);
+
+/** Whether a person belongs to a department (on Money Mondo: one of their jobs' teams). */
+export const inDept = (u: User, deptId: string | null | undefined) =>
+  !!deptId && (u.department_id === deptId || !!u.department_ids?.includes(deptId));
 
 export const isExec = (u: User) => u.role === "owner";
 export const isCompanyWide = (u: User) => u.role === "owner" || u.role === "ops";
@@ -14,7 +22,7 @@ export const isCompanyWide = (u: User) => u.role === "owner" || u.role === "ops"
  */
 export function isBeneath(actor: User, target: User): boolean {
   if (ROLE_RANK[target.role] <= ROLE_RANK[actor.role]) return false;
-  return actor.role !== "manager" || target.department_id === actor.department_id;
+  return actor.role !== "manager" || inDept(target, actor.department_id);
 }
 
 export function visibleDepartmentIds(db: Database, u: User): string[] {
@@ -36,7 +44,7 @@ export function canViewTask(u: User, t: Task): boolean {
 /** Whether `viewer` may see `target`'s tasks, activity and performance. */
 export function canViewUser(viewer: User, target: User): boolean {
   if (viewer.id === target.id || isCompanyWide(viewer)) return true;
-  return viewer.role === "manager" && target.role === "employee" && target.department_id === viewer.department_id;
+  return viewer.role === "manager" && target.role === "employee" && inDept(target, viewer.department_id);
 }
 
 export const canCreateTasks = (u: User) => u.role !== "employee";
@@ -56,7 +64,7 @@ export function assignableDepartmentIds(db: Database, actor: User): string[] {
 export function assignableUsers(db: Database, actor: User, deptId: string): User[] {
   if (actor.role === "manager" && actor.department_id !== deptId) return [];
   return db.users.filter(
-    (u) => u.active_status && isBeneath(actor, u) && (u.department_id === deptId || u.department_id === null),
+    (u) => u.active_status && isBeneath(actor, u) && (inDept(u, deptId) || u.department_id === null),
   );
 }
 
@@ -95,26 +103,86 @@ export const canEscalate = (actor: User, t: Task) =>
 export const canSeeInternalNotes = (actor: User) => actor.role !== "employee";
 export const canSubmitDepartmentReport = (actor: User, deptId: string) =>
   (actor.role === "manager" && actor.department_id === deptId) ||
-  (actor.role === "ops" && deptId === "ops");
+  (actor.role === "ops" && (actor.runs ? actor.runs.includes(deptId) : deptId === "ops"));
 export const canSubmitExecutiveReport = (actor: User) => actor.role === "ops";
 export const canViewReports = (actor: User) => actor.role !== "employee";
 
-// --- Venue ---------------------------------------------------------------------
-export const canManageEvents = (actor: User) => actor.role !== "employee";
-export const canLogWalkIn = (actor: User) => actor.active_status;
+// --- Venue (Arena only) -----------------------------------------------------------
+export const canManageEvents = (actor: User) => actor.role !== "employee" && !isMm(actor);
+export const canLogWalkIn = (actor: User) => actor.active_status && !isMm(actor);
 /** Fix or remove a walk-in: managers, or the person who logged it within the hour. */
 export const canEditWalkIn = (actor: User, w: WalkIn, now: number) =>
   actor.role !== "employee" || (w.logged_by === actor.id && now - Date.parse(w.at) < 60 * 60 * 1000);
-export const canEnterRevenue = (actor: User) => actor.role !== "employee";
-export const canSeeRevenue = (actor: User) => actor.role === "owner" || actor.role === "ops";
+export const canEnterRevenue = (actor: User) => actor.role !== "employee" && !isMm(actor);
+export const canSeeRevenue = (actor: User) => (actor.role === "owner" || actor.role === "ops") && !isMm(actor);
 export const canManageRecurring = (actor: User) => actor.role !== "employee";
-/** Add people, set PINs, change roles: the Owner for everyone, Ops for everyone below. */
+/** Add people, set PINs, change roles: the owners for everyone, Ops for everyone below. */
 export function canManagePerson(actor: User, target: User | null): boolean {
+  if (isMm(actor)) return canManageMmPerson(actor, target);
   if (actor.role === "owner") return true;
   if (actor.role !== "ops") return false;
   return !target || ROLE_RANK[target.role] > ROLE_RANK.ops;
 }
-export const canManagePeople = (actor: User) => actor.role === "owner" || actor.role === "ops";
+export const canManagePeople = (actor: User) =>
+  isMm(actor) ? actor.role !== "employee" : actor.role === "owner" || actor.role === "ops";
+
+// --- Money Mondo: people ----------------------------------------------------------
+
+/** Jobs `actor` may give someone: owners any, the Mall Manager all but their own, the OMT Manager only OMT Operator. */
+export function grantableJobs(actor: User): NonNullable<User["mm_jobs"]> {
+  if (actor.role === "owner") return ["mall_manager", "omt_manager", "omt", "sales", "collector", "group", "bb"];
+  if (actor.role === "ops") return ["omt_manager", "omt", "sales", "collector", "group", "bb"];
+  if (actor.role === "manager") return ["omt"];
+  return [];
+}
+
+/**
+ * On Money Mondo: the owners manage everyone, the Mall Manager everyone except
+ * owners and themselves, the OMT Manager people whose only job is OMT Operator.
+ */
+export function canManageMmPerson(actor: User, target: User | null): boolean {
+  if (actor.role === "employee") return false;
+  if (!target) return true;
+  if (target.role === "owner") return false;
+  if (actor.role === "owner") return true;
+  if (target.id === actor.id) return false;
+  const allowed = new Set(grantableJobs(actor));
+  return (target.mm_jobs ?? []).every((j) => allowed.has(j));
+}
+
+// --- Money Mondo: money -------------------------------------------------------------
+
+/** Owners and the Mall Manager see every amount. */
+export const canSeeAllMoney = (u: User) => isMm(u) && (u.role === "owner" || u.role === "ops");
+/** The OMT Manager also sees OMT money: the OMT counter and every operator's transfers. */
+export const canSeeOmtMoney = (u: User) => canSeeAllMoney(u) || (isMm(u) && u.role === "manager");
+
+export const canLogPickup = (u: User) => isMm(u) && (hasJob(u, "collector") || canSeeAllMoney(u));
+export const canViewPickup = (u: User, p: MmPickup) =>
+  canSeeAllMoney(u) || p.collector_id === u.id || p.handed_to === u.id || p.logged_by === u.id;
+export const canEditPickup = (u: User, p: MmPickup) =>
+  !p.deleted_at && !p.confirmed_at && (canSeeAllMoney(u) || p.collector_id === u.id || p.logged_by === u.id);
+
+/** Counters whose daily cash a person may enter and see. */
+export function cashCounters(u: User): MmCounter[] {
+  if (!isMm(u)) return [];
+  if (canSeeAllMoney(u)) return ["omt", "sales", "bb"];
+  const out = new Set<MmCounter>();
+  if (u.role === "manager" || hasJob(u, "omt")) out.add("omt");
+  if (hasJob(u, "sales")) out.add("sales");
+  if (hasJob(u, "bb")) out.add("bb");
+  return [...out];
+}
+
+/** Whose OMT transfers a person may enter: their own as an operator, everyone's as a manager. */
+export const canEnterTransfersFor = (u: User, operator: User) =>
+  isMm(u) && (canSeeOmtMoney(u) || (operator.id === u.id && hasJob(u, "omt")));
+export const canSeeTransfers = (u: User) => isMm(u) && (canSeeOmtMoney(u) || hasJob(u, "omt"));
+
+export const canLogExpense = (u: User) => isMm(u) && u.active_status;
+export const canViewExpense = (u: User, e: MmExpense) =>
+  canSeeAllMoney(u) || e.logged_by === u.id || (canSeeOmtMoney(u) && e.counter === "omt");
+export const canEditExpense = (u: User, e: MmExpense) => !e.deleted_at && (canSeeAllMoney(u) || e.logged_by === u.id);
 export const canEraseWorkspace = (actor: User) => actor.role === "owner";
 
 /** People a reminder can be sent to: yourself and anyone beneath you. */
@@ -142,7 +210,8 @@ export interface NavItem {
     | "user"
     | "building"
     | "calendar"
-    | "door";
+    | "door"
+    | "wallet";
 }
 
 const TOP_NAV: NavItem[] = [
@@ -178,14 +247,74 @@ const NAV: Record<Role, NavItem[]> = {
   ],
 };
 
-/** Navigation for a person. Restaurants and their waiters live inside Departments. */
-export const navFor = (u: User): NavItem[] => NAV[u.role];
+// Money Mondo: tasks and money. No events, walk-ins or venue revenue.
+const MM_TOP_NAV: NavItem[] = [
+  { href: "/command", label: "Command Center", icon: "radar", mobile: true },
+  { href: "/tasks", label: "All Tasks", icon: "tasks", mobile: true },
+  { href: "/money", label: "Money", icon: "wallet", mobile: true },
+  { href: "/team", label: "Team", icon: "users", mobile: true },
+  { href: "/departments", label: "Departments", icon: "network" },
+  { href: "/calendar", label: "Calendar", icon: "calendar" },
+  { href: "/reports", label: "Reports", icon: "reports" },
+  { href: "/settings", label: "Settings", icon: "settings" },
+];
 
-export const homeFor = (role: Role) => NAV[role][0].href;
+const MM_NAV: Record<Role, NavItem[]> = {
+  owner: MM_TOP_NAV,
+  ops: MM_TOP_NAV,
+  manager: [
+    { href: "/department", label: "My Department", icon: "building", mobile: true },
+    { href: "/tasks", label: "Assign Tasks", icon: "send", mobile: true },
+    { href: "/money", label: "Money", icon: "wallet", mobile: true },
+    { href: "/team", label: "Team", icon: "users", mobile: true },
+    { href: "/calendar", label: "Calendar", icon: "calendar" },
+    { href: "/reports", label: "Reports", icon: "reports" },
+    { href: "/settings", label: "Settings", icon: "settings" },
+  ],
+  employee: [
+    { href: "/my-day", label: "My Day", icon: "sun", mobile: true },
+    { href: "/my-tasks", label: "My Tasks", icon: "target", mobile: true },
+    { href: "/money", label: "Money", icon: "wallet", mobile: true },
+    { href: "/calendar", label: "Calendar", icon: "calendar", mobile: true },
+    { href: "/my-progress", label: "My Progress", icon: "trend" },
+    { href: "/profile", label: "Profile", icon: "user" },
+  ],
+};
+
+/** Navigation for a person. Restaurants and their waiters live inside Departments. */
+export const navFor = (u: User): NavItem[] => (isMm(u) ? MM_NAV : NAV)[u.role];
+
+export const homeFor = (u: User) => navFor(u)[0].href;
 
 export function canAccessRoute(u: User, path: string): boolean {
   return navFor(u).some((n) => path === n.href || path.startsWith(`${n.href}/`));
 }
+
+/** What a person can do, in plain words, for the business they are looking at. */
+export const permissionsFor = (u: User): string[] => (isMm(u) ? MM_ROLE_PERMISSIONS : ROLE_PERMISSIONS)[u.role];
+
+const MM_ROLE_PERMISSIONS: Record<Role, string[]> = {
+  owner: [
+    "Sees all of Money Mondo: people, tasks and money",
+    "Assigns to the Mall Manager, or anyone directly",
+    "Adds people, gives them their jobs and PINs",
+  ],
+  ops: [
+    "Runs Money Mondo day to day",
+    "Assigns tasks to the OMT Manager and every job",
+    "Adds staff and sees all money",
+  ],
+  manager: [
+    "Runs the OMT Operators",
+    "Assigns tasks to every OMT Operator",
+    "Adds OMT Operators and sees OMT money",
+  ],
+  employee: [
+    "Sees only their own tasks",
+    "Starts, pauses and completes tasks",
+    "Enters the money they handle",
+  ],
+};
 
 /** Plain-language permission summary shown on the role selector and profile. */
 export const ROLE_PERMISSIONS: Record<Role, string[]> = {

@@ -40,7 +40,24 @@ export function emptyDb(version: number): Database {
     revenue: [],
     reminders: [],
     recurring: [],
+    mm_pickups: [],
+    mm_cash: [],
+    mm_transfers: [],
+    mm_expenses: [],
   };
+}
+
+/** Fills collections added after a copy was saved, so older copies keep working. */
+export function normalize(db: Database): Database {
+  const empty = emptyDb(db.version);
+  let out = db;
+  for (const c of COLLECTIONS) {
+    if (!Array.isArray(db[c])) {
+      if (out === db) out = { ...db };
+      (out as unknown as Record<string, unknown>)[c] = empty[c];
+    }
+  }
+  return out;
 }
 
 // --- Sample (this browser only) ----------------------------------------------
@@ -52,7 +69,7 @@ export const sampleRepository: DataRepository = {
   load() {
     try {
       const raw = localStorage.getItem(SAMPLE_KEY);
-      return raw ? (JSON.parse(raw) as Database) : null;
+      return raw ? normalize(JSON.parse(raw) as Database) : null;
     } catch {
       return null;
     }
@@ -75,7 +92,7 @@ export const sampleRepository: DataRepository = {
     const onStorage = (e: StorageEvent) => {
       if (e.key !== SAMPLE_KEY || !e.newValue) return;
       try {
-        listener(JSON.parse(e.newValue) as Database);
+        listener(normalize(JSON.parse(e.newValue) as Database));
       } catch {
         // ignore a half-written value
       }
@@ -196,7 +213,7 @@ export function createCloudRepository(version: number): DataRepository & {
     const raw = localStorage.getItem(CACHE_KEY);
     if (raw) {
       const c = JSON.parse(raw) as Cache;
-      if (c.db && c.db.version === version) cache = { ...c, pending: c.pending ?? [] };
+      if (c.db && c.db.version === version) cache = { ...c, db: normalize(c.db), pending: c.pending ?? [] };
     }
   } catch {
     // start fresh

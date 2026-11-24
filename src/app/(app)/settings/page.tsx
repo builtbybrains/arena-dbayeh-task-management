@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Btn, PageHeader, Panel, Segmented } from "@/components/kit";
 import { setLang, t, useLang } from "@/lib/i18n";
-import { canEraseWorkspace, ROLE_PERMISSIONS } from "@/lib/permissions";
+import { canEraseWorkspace, permissionsFor } from "@/lib/permissions";
 import { useSync } from "@/lib/repository";
 import { actions, eraseWorkspace, leaveMode, resetDemo, setEffects, useApp, useDb, useMe } from "@/lib/store";
 import { fmtDay, fmtTime } from "@/lib/time";
@@ -85,7 +85,7 @@ export default function SettingsPage() {
                 {sync.status === "offline" ? t("Offline: changes will send when the connection is back.") : t("Saved online and shared with every phone.")}
               </li>
             </ul>
-            {(me.role === "owner" || me.role === "ops") && (
+            {(me.role === "owner" || me.role === "ops") && me.business !== "mm" && (
               <form
                 className="mt-4 flex gap-2"
                 onSubmit={(e) => {
@@ -129,7 +129,7 @@ export default function SettingsPage() {
           />
         </Panel>
 
-        {!sample && canEraseWorkspace(me) && (
+        {!sample && canEraseWorkspace(me) && me.business !== "mm" && (
           <Panel title={t("Start over")} icon={<TriangleAlert className="size-5" />}>
             <p className="text-sm leading-relaxed text-paper/70">
               {t("Erase every person, task, event and walk-in for everyone, and set the workspace up again. This cannot be undone.")}
@@ -155,7 +155,7 @@ export default function SettingsPage() {
               <div key={r} className="rounded-2xl border border-white/8 bg-white/[0.025] p-4">
                 <p className="font-display text-lg font-bold tracking-wide uppercase">{t(ROLE_LABEL[r])}</p>
                 <ul className="mt-2.5 space-y-2">
-                  {ROLE_PERMISSIONS[r].map((p) => (
+                  {permissionsFor({ ...me, role: r }).map((p) => (
                     <li key={p} className="flex items-start gap-2 text-xs leading-snug text-paper/70">
                       <Check className="mt-0.5 size-3.5 shrink-0 text-brand" /> {t(p)}
                     </li>

@@ -9,7 +9,7 @@ import { Avatar, Btn, EASE, Empty, Panel, PriorityBadge, Ring, StatusBadge } fro
 import { TaskCard, TrackedTime } from "@/components/task-card";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { isAr, t } from "@/lib/i18n";
-import { assignableDepartmentIds, canAssign, canViewDepartment, canViewUser } from "@/lib/permissions";
+import { assignableDepartmentIds, canAssign, canViewDepartment, canViewUser, inDept } from "@/lib/permissions";
 import {
   boardTasks,
   departmentNodes,
@@ -161,7 +161,7 @@ export function DepartmentView({ deptId, wide }: { deptId: string; wide?: boolea
     return <Empty title={t("No access")} hint={t("Your role cannot open this department.")} />;
   }
   const manager = idx(db).userById.get(dept.manager_id ?? "");
-  const people = db.users.filter((u) => u.department_id === deptId && u.active_status && u.role === "employee");
+  const people = db.users.filter((u) => inDept(u, deptId) && u.active_status && u.role === "employee");
   // A department can contain restaurants; their waiters are shown under each one.
   const outlets = db.restaurants.filter((r) => r.department_id === deptId);
   const unplaced = people.filter((u) => !outlets.some((r) => r.id === u.restaurant_id));

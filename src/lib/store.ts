@@ -2,17 +2,19 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 import { toast } from "sonner";
-import { t } from "./i18n";
+import { setVocabulary, t } from "./i18n";
 import { create } from "zustand";
 import * as engine from "./engine";
 import { DomainError, type NewTaskInput } from "./engine";
 import * as venue from "./venue-engine";
 import { createCloudRepository, emptyDb, sampleRepository, useSync, type DataRepository } from "./repository";
-import { buildSeed, DB_VERSION } from "./seed";
-import { canViewTask } from "./permissions";
+import { buildSeed, DB_VERSION, SAMPLE_VERSION } from "./seed";
+import { businessesOf, mergeBack, project } from "./business";
+import * as mm from "./mm-engine";
+import { canViewTask, homeFor } from "./permissions";
 import { idx } from "./selectors";
 import { dateKey } from "./time";
-import type { Database, EventStatus, Priority, RevenueEntry, User, Workspace } from "./types";
+import type { Business, Database, EventStatus, MmCounter, Priority, RevenueEntry, User, Workspace } from "./types";
 import { dueReminders } from "./venue";
 
 /** "workspace" is the real, shared Arena data; "sample" is the fictional demo. */
@@ -22,12 +24,16 @@ const MODE_KEY = "arena-os-mode-v1";
 const PROFILE_KEY = "arena-os-profile-v1"; // sample: per tab, so two tabs can show two roles
 const DEVICE_USER_KEY = "arena-os-device-user-v1"; // workspace: this phone stays signed in
 const PREFS_KEY = "arena-os-prefs-v1";
+const BUSINESS_KEY = "arena-os-business-v1"; // Arena or Money Mondo, per phone
 
 interface AppState {
   ready: boolean;
   mode: Mode | null;
+  /** The full database: both businesses. Screens read a view of it (useDb). */
   db: Database | null;
   userId: string | null;
+  /** The business this phone is looking at. */
+  business: Business;
   switchingTo: string | null;
   effects: "auto" | "off";
 }
@@ -37,9 +43,44 @@ export const useApp = create<AppState>(() => ({
   mode: null,
   db: null,
   userId: null,
+  business: "arena",
   switchingTo: null,
   effects: "auto",
 }));
+
+/**
+ * The business to show: the one chosen on this phone if the signed-in person
+ * belongs to it, otherwise their first. Arena staff only ever get Arena.
+ */
+function businessFor(s: Pick<AppState, "db" | "userId" | "business">): Business {
+  const u = s.db && s.userId ? s.db.users.find((x) => x.id === s.userId) : undefined;
+  if (!u) return s.business;
+  const list = businessesOf(u);
+  return list.includes(s.business) ? s.business : (list[0] ?? "arena");
+}
+
+/** The business on screen now. */
+export const currentBusiness = () => businessFor(useApp.getState());
+export const useBusiness = () => useApp(businessFor);
+
+/** Where a person lands after signing in or switching business. */
+export function homeOf(userId: string): string {
+  const s = useApp.getState();
+  const view = s.db ? project(s.db, businessFor({ ...s, userId })) : null;
+  const u = view ? idx(view).userById.get(userId) : undefined;
+  return u ? homeFor(u) : "/";
+}
+
+/** Look at Arena or Money Mondo. */
+export function setBusiness(b: Business) {
+  write("local", BUSINESS_KEY, b);
+  useApp.setState({ business: b });
+}
+
+// Words on screen follow the business (e.g. Mall Manager instead of Operations Manager).
+useApp.subscribe((s, prev) => {
+  if (s.business !== prev.business || s.db !== prev.db || s.userId !== prev.userId) setVocabulary(businessFor(s));
+});
 
 let repo: DataRepository = sampleRepository;
 let cloud: ReturnType<typeof createCloudRepository> | null = null;
@@ -127,7 +168,8 @@ let unsubscribe: (() => void) | null = null;
 export function boot() {
   if (useApp.getState().ready) return;
   const effects: AppState["effects"] = read("local", PREFS_KEY) === "off" ? "off" : "auto";
-  useApp.setState({ effects });
+  const business: Business = read("local", BUSINESS_KEY) === "mm" ? "mm" : "arena";
+  useApp.setState({ effects, business });
   const mode = read("local", MODE_KEY) as Mode | null;
   if (mode === "sample" || mode === "workspace") void enterMode(mode);
   else useApp.setState({ ready: true, mode: null, db: null, userId: null });
@@ -141,12 +183,22 @@ export function boot() {
   }
 }
 
+/** Over-time alerts and today's recurring tasks, worked out for each business on its own. */
+function timeWrites(db: Database, now: number): Database {
+  let full = db;
+  for (const biz of ["arena", "mm"] as Business[]) {
+    const view = project(full, biz);
+    full = mergeBack(full, view, venue.generateRecurring(engine.syncAlerts(view, now), now), biz);
+  }
+  return full;
+}
+
 /** Time-driven writes: overdue / over-time alerts and today's recurring tasks. */
 function tick() {
   const cur = useApp.getState().db;
   if (!cur || cur.users.length === 0) return;
   const now = Date.now();
-  const next = venue.generateRecurring(engine.syncAlerts(cur, now), now);
+  const next = timeWrites(cur, now);
   if (next !== cur) {
     useApp.setState({ db: next });
     repo.save(next, cur);
@@ -163,11 +215,11 @@ export async function enterMode(mode: Mode) {
     repo = sampleRepository;
     let db = repo.load();
     // Fresh sample data on first visit and each business day, so the venue always looks mid-shift.
-    if (!db || db.version !== DB_VERSION || dateKey(db.seeded_at) !== dateKey(now)) {
+    if (!db || db.version !== SAMPLE_VERSION || dateKey(db.seeded_at) !== dateKey(now)) {
       db = buildSeed(now);
       repo.save(db, null);
     }
-    db = venue.generateRecurring(engine.syncAlerts(db, now), now);
+    db = timeWrites(db, now);
     markSeen(db);
     let userId = read("session", PROFILE_KEY);
     if (userId && !db.users.some((u) => u.id === userId)) userId = null;
@@ -303,12 +355,18 @@ function notifyBrowser(title: string, body: string, tag: string) {
 /**
  * Pops a notification the first time this device sees a "ran over its time
  * allowed" entry for a task the signed-in person may see, or a reminder that
- * has come due for them.
+ * has come due for them, in each business they belong to.
  */
-function announce(db: Database) {
+function announce(full: Database) {
   const { userId } = useApp.getState();
+  const person = userId ? full.users.find((u) => u.id === userId) : undefined;
+  if (!person) return;
+  for (const biz of businessesOf(person)) announceIn(project(full, biz), userId!);
+}
+
+function announceIn(db: Database, userId: string) {
   const i = idx(db);
-  const me = userId ? i.userById.get(userId) : undefined;
+  const me = i.userById.get(userId);
   if (!me) return;
   const s = seenSet();
   let changed = false;
@@ -385,7 +443,7 @@ export function resetDemo() {
 export async function eraseWorkspace(): Promise<boolean> {
   const { mode, db, userId } = useApp.getState();
   const me = db?.users.find((u) => u.id === userId);
-  if (mode !== "workspace" || !cloud || me?.role !== "owner") return false;
+  if (mode !== "workspace" || !cloud || me?.role !== "owner" || !me.active_status) return false;
   try {
     await cloud.erase();
     signOut();
@@ -400,33 +458,62 @@ export async function eraseWorkspace(): Promise<boolean> {
 
 // --- Hooks -------------------------------------------------------------------
 
-/** The database. Only call below the app shell, which waits for it to load. */
+/**
+ * The database as the business on screen sees it (Arena or Money Mondo). Only
+ * call below the app shell, which waits for it to load.
+ */
 export function useDb(): Database {
+  const db = useApp((s) => s.db);
+  const biz = useBusiness();
+  if (!db) throw new Error("Arena OS data has not loaded yet.");
+  return project(db, biz);
+}
+
+/** Both businesses. Only for sign-in and for linking one person to both. */
+export function useFullDb(): Database {
   const db = useApp((s) => s.db);
   if (!db) throw new Error("Arena OS data has not loaded yet.");
   return db;
 }
 
-/** The signed-in demo profile. */
-export function useMe(): User {
-  const db = useDb();
+/** The signed-in person, as the business on screen sees them, or null. */
+export function useMaybeMe(): User | null {
+  const db = useApp((s) => s.db);
   const id = useApp((s) => s.userId);
-  const me = id ? idx(db).userById.get(id) : undefined;
+  const biz = useBusiness();
+  return db && id ? (idx(project(db, biz)).userById.get(id) ?? null) : null;
+}
+
+/** The signed-in person, as the business on screen sees them. */
+export function useMe(): User {
+  const me = useMaybeMe();
   if (!me) throw new Error("No one is signed in.");
   return me;
 }
 
 // --- Actions -----------------------------------------------------------------
 
+/**
+ * Runs a write against the business on screen and merges the result into the
+ * full database. `full` writes (people on Money Mondo) get both.
+ */
 function commit(change: (db: Database, actor: User, now: number) => Database, success?: string): boolean {
+  return commitWith((full, view, actor, now) => mergeBack(full, view, change(view, actor, now), currentBusiness()), success);
+}
+
+function commitWith(
+  change: (full: Database, view: Database, actor: User, now: number) => Database,
+  success?: string,
+): boolean {
   const { db, userId } = useApp.getState();
-  const actor = db && userId ? idx(db).userById.get(userId) : undefined;
-  if (!db || !actor) {
+  const view = db ? project(db, currentBusiness()) : null;
+  const actor = view && userId ? idx(view).userById.get(userId) : undefined;
+  if (!db || !view || !actor || !actor.active_status) {
     toast.error(t("Sign in first."));
     return false;
   }
   try {
-    const next = change(db, actor, Date.now());
+    const next = change(db, view, actor, Date.now());
     if (next !== db) {
       touchClock(false);
       useApp.setState({ db: next });
@@ -497,6 +584,14 @@ export const actions = {
       return false;
     }
     const isNew = !input.id;
+    const full = useApp.getState().db;
+    const clash = full?.users.find(
+      (u) => u.id !== input.id && u.active_status && u.name.trim().toLowerCase() === input.name.trim().toLowerCase(),
+    );
+    if (clash && currentBusiness() === "arena" && clash.in_arena === false) {
+      toast.error(t("{name} already works at Money Mondo. Use “Someone from Money Mondo” to add them to Arena.", { name: clash.name }));
+      return false;
+    }
     // Sample profiles open without a PIN; a placeholder keeps the record complete.
     const pin = input.pin || (isNew && useApp.getState().mode === "sample" ? "0000" : "");
     const pin_hash = pin ? await hashPin(id, pin) : undefined;
@@ -508,6 +603,47 @@ export const actions = {
   setPersonActive: (id: string, active: boolean) =>
     commit((db, a) => venue.setPersonActive(db, a, id, active), active ? "Person reactivated." : "Person deactivated."),
   addDepartment: (name: string) => commit((db, a) => venue.addDepartment(db, a, name), "Department added."),
+  /** Owners: bring someone from Money Mondo into Arena, with an Arena position. */
+  linkToArena: (userId: string, input: Omit<venue.PersonInput, "id" | "name" | "pin_hash">) =>
+    commitWith((full, _view, actor, now) => {
+      if (actor.role !== "owner") throw new DomainError("Only an owner can do this.");
+      const u = full.users.find((x) => x.id === userId);
+      if (!u || u.in_arena !== false) throw new DomainError("This person is already in Arena.");
+      const joined = { ...full, users: full.users.map((x) => (x.id === userId ? { ...x, in_arena: true, left_arena: false } : x)) };
+      const view = project(joined, "arena");
+      const me = idx(view).userById.get(actor.id)!;
+      return mergeBack(joined, view, venue.savePerson(view, me, now, { ...input, id: userId, name: u.name }), "arena");
+    }, "Person added."),
+
+  // Money Mondo: people
+  saveMmPerson: async (input: Omit<mm.MmPersonInput, "pin_hash" | "id"> & { id?: string; pin?: string }) => {
+    if (input.pin !== undefined && input.pin !== "" && !validPin(input.pin)) {
+      toast.error(t("A PIN is exactly 4 digits."));
+      return false;
+    }
+    const id = input.id ?? engine.uid("u");
+    const existing = useApp.getState().db?.users.find((u) => u.id === input.id);
+    const isNew = !existing || existing.mm_jobs === undefined; // new, or joining from Arena
+    const pin = input.pin || (!existing && useApp.getState().mode === "sample" ? "0000" : "");
+    const pin_hash = pin ? await hashPin(id, pin) : undefined;
+    return commitWith(
+      (full, view, a, now) => mm.saveMmPerson(full, view, a, now, { ...input, id, ...(pin_hash ? { pin_hash } : {}) }),
+      isNew ? "Person added." : "Changes saved.",
+    );
+  },
+  removeFromMm: (userId: string) => commitWith((full, view, a) => mm.removeFromMm(full, view, a, userId), "Removed from Money Mondo."),
+
+  // Money Mondo: money
+  logPickup: (input: mm.PickupInput) => commit((db, a, now) => mm.logPickup(db, a, now, input), "Pickup saved."),
+  handOverPickup: (id: string, toUserId: string) =>
+    commit((db, a, now) => mm.handOverPickup(db, a, now, id, toUserId), "Marked as handed over."),
+  confirmPickup: (id: string) => commit((db, a, now) => mm.confirmPickup(db, a, now, id), "Received. Thank you."),
+  removePickup: (id: string) => commit((db, a, now) => mm.removePickup(db, a, now, id), "Pickup removed."),
+  setCash: (date: string, counter: MmCounter, usd: number, lbp: number, note = "") =>
+    commit((db, a, now) => mm.setCash(db, a, now, date, counter, usd, lbp, note), "Cash saved."),
+  setTransfers: (input: mm.TransfersInput) => commit((db, a, now) => mm.setTransfers(db, a, now, input), "Transfers saved."),
+  logExpense: (input: mm.ExpenseInput) => commit((db, a, now) => mm.logExpense(db, a, now, input), "Expense saved."),
+  removeExpense: (id: string) => commit((db, a, now) => mm.removeExpense(db, a, now, id), "Expense removed."),
   updateWorkspace: (change: Partial<Pick<Workspace, "name" | "walkin_price_kid" | "walkin_price_adult">>) =>
     commit((db, a) => venue.updateWorkspace(db, a, change), "Settings saved."),
 };

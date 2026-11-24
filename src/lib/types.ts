@@ -7,6 +7,19 @@
  * whole venue), then department managers (Restaurant, Playground), then staff.
  */
 export type Role = "owner" | "ops" | "manager" | "employee";
+
+/**
+ * The two businesses in one workspace. Arena is the venue; Money Mondo is a
+ * separate business that only its own people and the owners can see.
+ */
+export type Business = "arena" | "mm";
+
+/**
+ * Money Mondo jobs. A person can hold several (e.g. OMT Operator and Group
+ * Agent). The Mall Manager runs all of Money Mondo; the OMT Manager runs the
+ * OMT Operators.
+ */
+export type MmJob = "mall_manager" | "omt_manager" | "omt" | "sales" | "collector" | "group" | "bb";
 export type Priority = "critical" | "high" | "medium" | "low";
 export type TaskStatus = "pending" | "in_progress" | "paused" | "completed";
 
@@ -23,6 +36,17 @@ export interface User {
   pin_hash: string | null; // SHA-256 of the 4-digit PIN; null in sample mode
   phone?: string | null;
   created_at: string;
+  created_by?: string | null; // who added this person
+  /** false: not part of Arena (a Money Mondo-only person). Missing means true. */
+  in_arena?: boolean;
+  /** Worked in Arena before and still works in Money Mondo: shown in Arena as someone who left. */
+  left_arena?: boolean;
+  /** Money Mondo jobs. Missing: never in Money Mondo. Empty: left Money Mondo. */
+  mm_jobs?: MmJob[];
+  // Filled in only on the Money Mondo view of a person (see business.ts).
+  business?: Business;
+  department_ids?: string[]; // every team the person belongs to
+  runs?: string[]; // teams a top manager runs directly
 }
 
 export interface Department {
@@ -96,6 +120,7 @@ export type ActivityAction =
 
 export interface TaskActivityLog {
   id: string;
+  business?: Business; // only for entries without a task; missing = Arena
   task_id: string | null;
   actor_id: string;
   action: ActivityAction;
@@ -164,6 +189,7 @@ export interface ExecutiveSnapshot {
 
 export interface ExecutiveReport {
   id: string;
+  business?: Business; // missing = Arena
   report_date: string;
   submitted_by: string;
   submitted_at: string;
@@ -227,6 +253,7 @@ export interface RevenueEntry {
 
 export interface Reminder {
   id: string;
+  business?: Business; // missing = Arena
   title: string;
   note: string;
   at: string; // UTC moment it fires
@@ -259,6 +286,70 @@ export interface RecurringTask {
   deleted_at: string | null;
 }
 
+// --- Money Mondo: money tracking ---------------------------------------------
+
+export type Currency = "USD" | "LBP";
+/** Counters that close their cash at the end of the day. */
+export type MmCounter = "omt" | "sales" | "bb";
+
+/** Cash a money collector picked up, and who it was handed to. */
+export interface MmPickup {
+  id: string;
+  at: string; // UTC time of the pickup
+  collector_id: string;
+  amount: number;
+  currency: Currency;
+  source: string; // where or who it was collected from
+  note: string;
+  handed_to: string | null; // person it was handed to
+  handed_at: string | null;
+  confirmed_at: string | null; // the person who received it confirmed
+  logged_by: string;
+  deleted_at: string | null;
+}
+
+/** End-of-day cash for one counter. One row per counter per day. */
+export interface MmCash {
+  id: string; // `${date}_${counter}`
+  date: string; // Beirut business date
+  counter: MmCounter;
+  usd: number;
+  lbp: number;
+  note: string;
+  entered_by: string;
+  updated_at: string;
+}
+
+/** OMT transfers handled by one operator in one day. */
+export interface MmTransfers {
+  id: string; // `${date}_${operator_id}`
+  date: string;
+  operator_id: string;
+  sent_count: number;
+  sent_usd: number;
+  sent_lbp: number;
+  received_count: number;
+  received_usd: number;
+  received_lbp: number;
+  note: string;
+  entered_by: string;
+  updated_at: string;
+}
+
+/** Money paid out. */
+export interface MmExpense {
+  id: string;
+  date: string;
+  amount: number;
+  currency: Currency;
+  category: string;
+  note: string;
+  counter: MmCounter | null; // which counter's cash it came from, if any
+  logged_by: string;
+  at: string;
+  deleted_at: string | null;
+}
+
 /** Workspace-wide facts: name, currency, who set it up. */
 export interface Workspace {
   id: "workspace";
@@ -286,6 +377,10 @@ export interface Database {
   revenue: RevenueEntry[];
   reminders: Reminder[];
   recurring: RecurringTask[];
+  mm_pickups: MmPickup[];
+  mm_cash: MmCash[];
+  mm_transfers: MmTransfers[];
+  mm_expenses: MmExpense[];
 }
 
 /** The record collections that sync, in the order they load. */
@@ -303,6 +398,10 @@ export const COLLECTIONS = [
   "revenue",
   "reminders",
   "recurring",
+  "mm_pickups",
+  "mm_cash",
+  "mm_transfers",
+  "mm_expenses",
 ] as const;
 export type Collection = (typeof COLLECTIONS)[number];
 

@@ -2,7 +2,7 @@
 // revenue totals, reminders. Every number on the new screens comes from here.
 
 import { t } from "./i18n";
-import { isCompanyWide } from "./permissions";
+import { inDept, isCompanyWide } from "./permissions";
 import { employeeRows, idx, isOverdue, summarize, tasksInRange } from "./selectors";
 import { addDays, beirutHour, dateKey, dayEnd, dayStart, ms } from "./time";
 import type { Area, Database, EmployeeReportRow, Reminder, RevenueEntry, Task, User, VenueEvent, WalkIn } from "./types";
@@ -224,7 +224,7 @@ export function businessReport(db: Database, viewer: User, from: string, to: str
     (u) =>
       u.active_status &&
       u.role !== "owner" &&
-      (isCompanyWide(viewer) ? true : u.department_id === viewer.department_id),
+      (isCompanyWide(viewer) ? true : inDept(u, viewer.department_id)),
   );
   const rows = employeeRows(db, visible, from, to, now)
     .filter((r) => r.assigned > 0)

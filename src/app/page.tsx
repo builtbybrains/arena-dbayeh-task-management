@@ -9,10 +9,12 @@ import { Field } from "@/components/forms";
 import { ArenaMark, Avatar, Btn, EASE, Loader, Logo } from "@/components/kit";
 import { LangToggle } from "@/components/shell";
 import { t, useLang } from "@/lib/i18n";
-import { homeFor, ROLE_PERMISSIONS } from "@/lib/permissions";
+import { permissionsFor } from "@/lib/permissions";
+import { jobsOf, jobTitle, project } from "@/lib/business";
+import { idx } from "@/lib/selectors";
 import { useSync } from "@/lib/repository";
 import { DEMO_PROFILES } from "@/lib/seed";
-import { enterMode, leaveMode, setupWorkspace, signInWithPin, switchProfile, syncNow, useApp } from "@/lib/store";
+import { enterMode, homeOf, leaveMode, setBusiness, setupWorkspace, signInWithPin, switchProfile, syncNow, useApp } from "@/lib/store";
 import { ROLE_RANK, type User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -27,7 +29,7 @@ export default function StartPage() {
 
   // A phone that is already signed in to the workspace goes straight in.
   useEffect(() => {
-    if (mode === "workspace" && me) router.replace(homeFor(me.role));
+    if (mode === "workspace" && me) router.replace(homeOf(me.id));
   }, [mode, me, router]);
 
   if (!ready) return <Loader label={t("Opening Arena OS")} />;
@@ -141,7 +143,10 @@ function SamplePicker() {
             <motion.button
               key={p.userId}
               type="button"
-              onClick={() => switchProfile(u.id)}
+              onClick={() => {
+                setBusiness(p.business ?? "arena");
+                switchProfile(u.id);
+              }}
               initial={{ opacity: 0, y: 22 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.45, delay: 0.05 * n, ease: EASE }}
@@ -153,12 +158,15 @@ function SamplePicker() {
                 <Avatar user={u} size={46} />
                 <div className="min-w-0 flex-1">
                   <p className="display text-xl">{t(p.label)}</p>
-                  <p className="truncate text-xs text-paper/55">{u.name}</p>
+                  <p className="truncate text-xs text-paper/55">
+                    {u.name}
+                    {p.business === "mm" && <span className="ms-1.5 font-semibold text-med">· Money Mondo</span>}
+                  </p>
                 </div>
                 <ArrowRight className="size-4 shrink-0 text-paper/30 transition group-hover:translate-x-1 group-hover:text-brand rtl:rotate-180 rtl:group-hover:-translate-x-1" />
               </div>
               <ul className="mt-3 space-y-1.5">
-                {ROLE_PERMISSIONS[u.role].map((perm) => (
+                {permissionsFor(idx(project(db!, p.business ?? "arena")).userById.get(u.id) ?? u).map((perm) => (
                   <li key={perm} className="flex items-start gap-2 text-xs leading-snug text-paper/65">
                     <Check className="mt-0.5 size-3.5 shrink-0 text-brand" /> {t(perm)}
                   </li>
@@ -296,7 +304,9 @@ function SignIn({ users }: { users: User[] }) {
             <Avatar user={u} size={42} />
             <span className="min-w-0 flex-1 leading-tight">
               <span className="block truncate font-semibold">{u.name}</span>
-              <span className="block truncate text-xs text-paper/55">{t(u.title)}</span>
+              <span className="block truncate text-xs text-paper/55">
+                {t(u.in_arena === false ? jobTitle(jobsOf(u)) : u.title)}
+              </span>
             </span>
             <ArrowRight className="size-4 text-paper/30 rtl:rotate-180" />
           </button>

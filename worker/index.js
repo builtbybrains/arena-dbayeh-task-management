@@ -15,7 +15,7 @@ const MAX_BATCH = 400;
 const COLLECTIONS = new Set([
   "meta", "users", "departments", "restaurants", "tasks", "sessions", "logs",
   "daily_reports", "executive_reports", "events", "walkins", "revenue",
-  "reminders", "recurring",
+  "reminders", "recurring", "mm_pickups", "mm_cash", "mm_transfers", "mm_expenses",
 ]);
 
 const MAX_RECORD = 200_000; // characters of JSON per record

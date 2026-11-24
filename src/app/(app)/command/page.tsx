@@ -93,7 +93,7 @@ export default function CommandCenterPage() {
 
       <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
         <Panel
-          title={t("Arena operations map")}
+          title={me.business === "mm" ? t("Money Mondo map") : t("Arena operations map")}
           icon={<Radar className="size-5" />}
           right={
             <p className="hidden items-center gap-3 text-[11px] text-paper/50 sm:flex">
@@ -109,7 +109,7 @@ export default function CommandCenterPage() {
             </p>
           }
         >
-          <ArenaMap nodes={nodes} selectedId={dept} onSelect={setDept} className="h-[380px] md:h-[440px]" />
+          <ArenaMap nodes={nodes} selectedId={dept} onSelect={setDept} center={me.business === "mm" ? "Mondo" : "Arena"} className="h-[380px] md:h-[440px]" />
           <p className="mt-2 text-xs text-paper/45">
             {t(
               "Select a department to open its tasks, people and performance. Node size shows today’s workload, the arc shows completion, moving dots show people working.",

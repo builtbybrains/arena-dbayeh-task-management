@@ -52,6 +52,7 @@ export function BusinessReportView() {
   const { from, to } = preset === "custom" ? custom : presetRange(preset, today);
   const r = useMemo(() => businessReport(db, me, from, to, now), [db, me, from, to, now]);
   const money = canSeeRevenue(me);
+  const venue = me.business !== "mm"; // Money Mondo has no events or walk-ins; its money is on the Money screen
   const i = idx(db);
   const maxDay = Math.max(1, ...r.walkins.per_day.map((d) => d.people));
 
@@ -73,6 +74,8 @@ export function BusinessReportView() {
       ["Tasks per person"],
       ["Name", "Title", "Assigned", "Completed", "Overdue", "Late", "Completion %", "Tracked minutes"],
       ...r.people.map((p) => [p.name, p.title, p.assigned, p.completed, p.overdue, p.delayed, toPercent(p.completion_rate), toMinutes(p.active_seconds)]),
+    ];
+    if (venue) rows.push(
       [],
       ["Events"],
       ["Date", "Start", "End", "Event", "Type", "Status", "Area", "Kids", "Adults", ...(money ? ["Package USD", "Deposit USD"] : []), "Client", "Phone"],
@@ -94,7 +97,7 @@ export function BusinessReportView() {
       ["Walk-ins per day"],
       ["Date", "People", ...(money ? ["Paid at door USD"] : [])],
       ...r.walkins.per_day.map((d) => [d.date, d.people, ...(money ? [d.amount] : [])]),
-    ];
+    );
     if (money) {
       rows.push(
         [],
@@ -104,13 +107,13 @@ export function BusinessReportView() {
         ["Total", r.revenue.door, r.revenue.events, r.revenue.restaurant, r.revenue.other, r.revenue.total],
       );
     }
-    downloadCsv(`arena-os-report-${rangeSlug(from, to)}`, rows);
+    downloadCsv(`${venue ? "arena-os" : "money-mondo"}-report-${rangeSlug(from, to)}`, rows);
     toast.success(t("CSV exported."));
   };
 
   return (
     <div className="print-root">
-      <PageHeader eyebrow={t("Reports")} title={t("Report for {range}", { range: rangeText })} sub={t("Tasks, events, walk-ins and revenue for the dates you pick.")}>
+      <PageHeader eyebrow={t("Reports")} title={t("Report for {range}", { range: rangeText })} sub={venue ? t("Tasks, events, walk-ins and revenue for the dates you pick.") : t("Tasks per person for the dates you pick. Money is on the Money screen.")}>
         <Btn onClick={exportCsv}>
           <Download className="size-4" /> {t("Export CSV")}
         </Btn>
@@ -135,10 +138,11 @@ export function BusinessReportView() {
         )}
       </div>
 
-      <div className={cn("mb-4 grid grid-cols-2 gap-3", money ? "lg:grid-cols-4" : "lg:grid-cols-3")}>
+      <div className={cn("mb-4 grid grid-cols-2 gap-3", !venue ? "lg:grid-cols-2" : money ? "lg:grid-cols-4" : "lg:grid-cols-3")}>
         <Stat label={t("Tasks done")} value={r.tasks.completed} sub={t("{rate}% of {n} assigned", { rate: Math.round(r.tasks.completion_rate), n: r.tasks.assigned })} tone="brand" />
-        <Stat label={t("Events")} value={r.events.count} sub={t("{n} guests", { n: r.events.guests })} icon={<PartyPopper className="size-4" />} />
-        <Stat label={t("Walk-ins")} value={r.walkins.people} sub={fmtParty(r.walkins.kids, r.walkins.adults)} icon={<DoorOpen className="size-4" />} />
+        {venue && <Stat label={t("Events")} value={r.events.count} sub={t("{n} guests", { n: r.events.guests })} icon={<PartyPopper className="size-4" />} />}
+        {venue && <Stat label={t("Walk-ins")} value={r.walkins.people} sub={fmtParty(r.walkins.kids, r.walkins.adults)} icon={<DoorOpen className="size-4" />} />}
+        {!venue && <Stat label={t("Tracked time")} text={fmtDuration(r.people.reduce((a, p) => a + p.active_seconds, 0))} />}
         {money && <Stat label={t("Revenue")} value={r.revenue.total} format={(n) => fmtMoney(n)} icon={<Wallet className="size-4" />} tone="brand" />}
       </div>
 
@@ -194,6 +198,7 @@ export function BusinessReportView() {
           )}
         </Panel>
 
+        {venue && (<>
         <Panel title={t("Events")} icon={<PartyPopper className="size-5" />}>
           <div className="mb-3 grid grid-cols-3 gap-2 text-center">
             <Mini label={t("Held")} value={r.events.count} />
@@ -255,6 +260,7 @@ export function BusinessReportView() {
             </ul>
           )}
         </Panel>
+        </>)}
 
         {money && (
           <Panel title={t("Revenue")} icon={<Wallet className="size-5" />} className="xl:col-span-2">

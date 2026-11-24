@@ -29,7 +29,7 @@ import {
 } from "@/components/kit";
 import { TaskCard, useStartTask } from "@/components/task-card";
 import { t } from "@/lib/i18n";
-import { ROLE_PERMISSIONS } from "@/lib/permissions";
+import { permissionsFor } from "@/lib/permissions";
 import {
   dailyTrend,
   elapsedSeconds,
@@ -865,8 +865,8 @@ export function Profile() {
         <div className="min-w-0">
           <h1 className="display text-4xl">{me.name}</h1>
           <p className="mt-1.5 text-sm text-paper/65">
-            {me.title}
-            {dept ? ` · ${dept.name}` : ""}
+            {t(me.title)}
+            {dept && me.business !== "mm" ? ` · ${t(dept.name)}` : ""}
             {restaurant ? ` · ${restaurant.name}` : ""}
           </p>
           {manager && (
@@ -886,7 +886,7 @@ export function Profile() {
           {t("Access level: {role}", { role: t(ROLE_LABEL[me.role]) })}
         </p>
         <ul className="space-y-2">
-          {ROLE_PERMISSIONS[me.role].map((p) => (
+          {permissionsFor(me).map((p) => (
             <li
               key={p}
               className="flex items-start gap-2.5 text-sm text-paper/80"

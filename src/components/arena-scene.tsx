@@ -69,10 +69,12 @@ function FlatMap({
   nodes,
   selectedId,
   onSelect,
+  center,
 }: {
   nodes: DepartmentNode[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  center: string;
 }) {
   const at = (n: number) => {
     const a = (n / nodes.length) * Math.PI * 2 - Math.PI / 2;
@@ -92,7 +94,7 @@ function FlatMap({
         })}
       </svg>
       <div className="absolute top-1/2 left-1/2 grid size-16 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-brand/50 bg-brand/15 shadow-[0_0_40px_rgb(34_199_63/45%)]">
-        <span className="display text-[10px] tracking-[0.2em] text-brand-soft">Arena</span>
+        <span className="display text-[10px] tracking-[0.2em] text-brand-soft">{center}</span>
       </div>
       {nodes.map((node, n) => {
         const p = at(n);
@@ -138,21 +140,24 @@ export function ArenaMap({
   selectedId,
   onSelect,
   className,
+  center = "Arena",
 }: {
   nodes: DepartmentNode[];
   selectedId: string | null;
   onSelect: (id: string) => void;
   className?: string;
+  /** Word in the middle of the map: the business. */
+  center?: string;
 }) {
   const mode = useSceneMode();
-  const flat = <FlatMap nodes={nodes} selectedId={selectedId} onSelect={onSelect} />;
+  const flat = <FlatMap nodes={nodes} selectedId={selectedId} onSelect={onSelect} center={center} />;
   return (
     <div className={cn("relative overflow-hidden rounded-2xl bg-[radial-gradient(ellipse_at_center,rgb(34_199_63/10%),transparent_70%)]", className)}>
       {mode === null && <SceneLoading />}
       {mode === "flat" && flat}
       {mode === "3d" && (
         <SceneBoundary fallback={flat}>
-          <ArenaCanvas nodes={nodes} selectedId={selectedId} onSelect={onSelect} />
+          <ArenaCanvas nodes={nodes} selectedId={selectedId} onSelect={onSelect} center={center} />
         </SceneBoundary>
       )}
     </div>
