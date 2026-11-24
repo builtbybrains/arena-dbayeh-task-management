@@ -377,4 +377,7 @@ export const CORE: Record<string, string> = {
   "Go through open follow-ups and agree owners and deadlines.": "راجع المتابعات المفتوحة واتفق على المسؤولين والمواعيد النهائية.",
   "Check department readiness for the weekend": "التحقق من جاهزية القسم لعطلة نهاية الأسبوع",
   "Confirm staffing, stock and equipment for the weekend peak.": "تأكّد من الموظفين والمخزون والمعدات لذروة عطلة نهاية الأسبوع.",
+  "Task passed on.": "تم تمرير المهمة.",
+  "Only the person holding this task can pass it on.": "فقط الشخص المسؤول عن هذه المهمة يمكنه تمريرها.",
+  "You can only pass a task to someone on your team.": "يمكنك تمرير المهمة فقط لأحد أعضاء فريقك.",
 };

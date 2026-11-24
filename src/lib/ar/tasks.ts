@@ -168,4 +168,8 @@ export const TASKS: Record<string, string> = {
   "Nothing fits these filters. Clear them or pick another status.":
     "لا شيء يطابق عوامل التصفية هذه. امسحها أو اختر حالة أخرى.",
   "{priority} priority": "الأولوية {priority}",
+  "Pass it on": "تمريرها لموظف",
+  "Give this task to someone on your team. It leaves your queue and you still see its progress.": "أعطِ هذه المهمة لأحد أعضاء فريقك. تخرج من قائمتك وتبقى قادراً على متابعة تقدمها.",
+  "Pass it on to": "تمرير المهمة إلى",
+  "Pass on": "تمرير",
 };

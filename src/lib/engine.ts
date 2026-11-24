@@ -4,11 +4,13 @@
 
 import {
   canAssign,
+  canDelegate,
   canEscalate,
   canManageTask,
   canRunTimer,
   canSubmitDepartmentReport,
   canSubmitExecutiveReport,
+  isBeneath,
 } from "./permissions";
 import { departmentSnapshot, elapsedSeconds, executiveSnapshot, idx } from "./selectors";
 import { iso, ms } from "./time";
@@ -209,6 +211,29 @@ export function reassignTask(db: Database, actor: User, now: number, taskId: str
     tasks: patch(db, taskId, { assigned_to: userId, status: task.status === "in_progress" ? "paused" : task.status }, now),
     sessions: closeOpen(db.sessions, taskId, now),
     logs: [...db.logs, entry(now, taskId, actor.id, "reassigned", task.assigned_to, userId)],
+  };
+}
+
+/** Hand a task you received to someone on your team; it moves to their department. */
+export function delegateTask(db: Database, actor: User, now: number, taskId: string, userId: string): Database {
+  const task = getTask(db, taskId);
+  if (!canDelegate(actor, task)) fail("Only the person holding this task can pass it on.");
+  const target = db.users.find((u) => u.id === userId && u.active_status);
+  if (!target || !isBeneath(actor, target)) fail("You can only pass a task to someone on your team.");
+  return {
+    ...db,
+    tasks: patch(
+      db,
+      taskId,
+      {
+        assigned_to: target!.id,
+        department_id: target!.department_id ?? task.department_id,
+        status: task.status === "in_progress" ? "paused" : task.status,
+      },
+      now,
+    ),
+    sessions: closeOpen(db.sessions, taskId, now),
+    logs: [...db.logs, entry(now, taskId, actor.id, "reassigned", actor.id, target!.id)],
   };
 }
 

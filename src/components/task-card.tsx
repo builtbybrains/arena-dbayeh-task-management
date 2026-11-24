@@ -21,7 +21,9 @@ import { t } from "@/lib/i18n";
 import {
   assignableUsers,
   canEscalate,
+  canDelegate,
   canManageTask,
+  delegateTargets,
   canRunTimer,
   canSeeInternalNotes,
 } from "@/lib/permissions";
@@ -228,6 +230,34 @@ export function TaskCard({
   );
 }
 
+/** For a manager who received a task: hand it to someone on their team. */
+function PassOn({ task }: { task: Task }) {
+  const db = useDb();
+  const me = useMe();
+  const [to, setTo] = useState("");
+  const people = delegateTargets(db, me).sort((a, b) => a.name.localeCompare(b.name));
+  if (people.length === 0) return null;
+  return (
+    <div className="space-y-2 rounded-2xl border border-brand/30 bg-brand/[0.06] p-3">
+      <p className="text-[11px] font-semibold tracking-[0.14em] text-brand uppercase">{t("Pass it on")}</p>
+      <p className="text-xs text-paper/60">{t("Give this task to someone on your team. It leaves your queue and you still see its progress.")}</p>
+      <div className="flex gap-2">
+        <select className="field" value={to} onChange={(e) => setTo(e.target.value)} aria-label={t("Pass it on to")}>
+          <option value="">{t("Choose a team member…")}</option>
+          {people.map((u) => (
+            <option key={u.id} value={u.id}>
+              {u.name} · {t(u.title)}
+            </option>
+          ))}
+        </select>
+        <Btn variant="primary" disabled={!to} onClick={() => actions.delegateTask(task.id, to)}>
+          {t("Pass on")}
+        </Btn>
+      </div>
+    </div>
+  );
+}
+
 function TaskDetails({ task, siblings }: { task: Task; siblings?: string[] }) {
   const db = useDb();
   const me = useMe();
@@ -281,6 +311,8 @@ function TaskDetails({ task, siblings }: { task: Task; siblings?: string[] }) {
       )}
 
       {canRunTimer(me, task) && <TimerControls task={task} />}
+
+      {canDelegate(me, task) && <PassOn task={task} />}
 
       {manage && (
         <div className="space-y-3 rounded-2xl border border-white/8 bg-white/[0.025] p-3">

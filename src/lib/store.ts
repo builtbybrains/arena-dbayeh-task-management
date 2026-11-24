@@ -455,6 +455,8 @@ export const actions = {
   reopenTask: (taskId: string) => commit((db, a, now) => engine.reopenTask(db, a, now, taskId), "Task reopened."),
   reassignTask: (taskId: string, userId: string) =>
     commit((db, a, now) => engine.reassignTask(db, a, now, taskId, userId), "Task reassigned."),
+  delegateTask: (taskId: string, userId: string) =>
+    commit((db, a, now) => engine.delegateTask(db, a, now, taskId, userId), "Task passed on."),
   changePriority: (taskId: string, priority: Priority) =>
     commit((db, a, now) => engine.changePriority(db, a, now, taskId, priority)),
   updateTask: (taskId: string, change: Parameters<typeof engine.updateTask>[4]) =>

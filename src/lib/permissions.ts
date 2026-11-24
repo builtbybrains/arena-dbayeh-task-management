@@ -77,6 +77,18 @@ export function canManageTask(db: Database, actor: User, t: Task): boolean {
   return assignee ? isBeneath(actor, assignee) : true;
 }
 
+/**
+ * Pass a task on: a manager who received a task (the Operations Manager from
+ * the Owner, a department manager from Ops) hands it to someone beneath them.
+ */
+export const canDelegate = (actor: User, t: Task) =>
+  !t.deleted_at && actor.role !== "employee" && t.assigned_to === actor.id && t.status !== "completed";
+
+/** Who a task can be passed on to: anyone beneath the person holding it. */
+export function delegateTargets(db: Database, actor: User): User[] {
+  return db.users.filter((u) => u.active_status && isBeneath(actor, u));
+}
+
 export const canRunTimer = (actor: User, t: Task) => !t.deleted_at && t.assigned_to === actor.id;
 export const canEscalate = (actor: User, t: Task) =>
   actor.role === "manager" && t.department_id === actor.department_id && t.status !== "completed";
