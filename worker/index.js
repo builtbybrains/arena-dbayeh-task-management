@@ -18,10 +18,19 @@ const COLLECTIONS = new Set([
   "reminders", "recurring",
 ]);
 
+const MAX_RECORD = 200_000; // characters of JSON per record
+
+// Allows `next dev` on another origin (NEXT_PUBLIC_SYNC_URL) to use this API.
+const CORS = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-methods": "GET, POST, OPTIONS",
+  "access-control-allow-headers": "content-type",
+};
+
 const json = (body, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { "content-type": "application/json", "cache-control": "no-store" },
+    headers: { "content-type": "application/json", "cache-control": "no-store", ...CORS },
   });
 
 async function readMeta(db) {
@@ -55,6 +64,7 @@ async function push(db, request) {
       return json({ error: "Bad record" }, 400);
     }
     if (r.d !== null && typeof r.d !== "string") return json({ error: "Bad record" }, 400);
+    if (typeof r.d === "string" && r.d.length > MAX_RECORD) return json({ error: "Record too large" }, 413);
   }
   const meta = await readMeta(db);
   if (body.epoch && Number(body.epoch) !== meta.epoch) return json({ error: "reset", ...meta }, 409);
@@ -117,6 +127,7 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (!url.pathname.startsWith("/api/")) return serveAsset(url);
+    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
     try {
       if (url.pathname === "/api/sync" && request.method === "GET") return await pull(env.DB, url);
       if (url.pathname === "/api/sync" && request.method === "POST") return await push(env.DB, request);
