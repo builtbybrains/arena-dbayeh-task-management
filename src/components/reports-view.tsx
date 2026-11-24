@@ -31,7 +31,7 @@ import {
   Users,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useId, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useId, useMemo, useState, type ReactNode } from "react";
 import { Area, Bar, BarChart, CartesianGrid, Cell, ComposedChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
 import { Avatar, Btn, Chip, EASE, Empty, PageHeader, Panel, Ring, Segmented, Stat } from "@/components/kit";
@@ -49,6 +49,7 @@ import {
   totalsCsvRow,
   type CsvRows,
 } from "@/lib/export";
+import { isAr, t } from "@/lib/i18n";
 import {
   canSubmitDepartmentReport,
   canSubmitExecutiveReport,
@@ -109,6 +110,13 @@ const SUBMIT_WINDOW_DAYS = 1;
 
 const rateColor = (rate: number) => (rate >= 75 ? "#22c73f" : rate >= 45 ? "#ffc24b" : "#ff4d5e");
 const pct = (n: number) => `${Math.round(n)}%`;
+
+/** Fill {name} placeholders of a translated sentence with React nodes (bold names and the like). */
+function rich(text: string, nodes: Record<string, ReactNode>): ReactNode[] {
+  return text
+    .split(/\{(\w+)\}/g)
+    .map((part, n) => (n % 2 ? <Fragment key={n}>{nodes[part] ?? `{${part}}`}</Fragment> : part));
+}
 
 const PRINT_CSS = `@media print {
   .rv-chart text { fill: #333 !important; }
@@ -184,20 +192,20 @@ export function ReportsView() {
   const tabs = useMemo<{ value: Tab; label: ReactNode }[]>(() => {
     if (!wide) {
       return [
-        { value: "submissions", label: "Daily report" },
-        { value: "departments", label: "My department" },
-        { value: "employees", label: "My team" },
+        { value: "submissions", label: t("Daily report") },
+        { value: "departments", label: t("My department") },
+        { value: "employees", label: t("My team") },
       ];
     }
     return [
-      { value: "executive", label: "Executive" },
-      { value: "departments", label: "Departments" },
-      { value: "employees", label: "Employees" },
+      { value: "executive", label: t("Executive") },
+      { value: "departments", label: t("Departments") },
+      { value: "employees", label: t("Employees") },
       {
         value: "submissions",
         label: (
           <span className="inline-flex items-center gap-1.5">
-            Submissions
+            {t("Submissions")}
             {awaiting > 0 && (
               <span className="tnum rounded-full bg-crit px-1.5 text-[10px] leading-4 font-bold text-white">{awaiting}</span>
             )}
@@ -217,8 +225,8 @@ export function ReportsView() {
     return (
       <Empty
         icon={<FileText className="size-6" />}
-        title="Reports are for managers"
-        hint="Your own numbers are on My Progress."
+        title={t("Reports are for managers")}
+        hint={t("Your own numbers are on My Progress.")}
       />
     );
   }
@@ -226,9 +234,9 @@ export function ReportsView() {
   const rangeText =
     period === "day"
       ? anchor === today
-        ? `Today, ${fmtKey(anchor)}`
+        ? t("Today, {date}", { date: fmtKey(anchor) })
         : fmtKey(anchor)
-      : `${fmtKeyShort(from)} to ${fmtKeyShort(to)}`;
+      : t("{from} to {to}", { from: fmtKeyShort(from), to: fmtKeyShort(to) });
 
   function exportCsv() {
     const span = rangeSlug(from, to);
@@ -289,7 +297,7 @@ export function ReportsView() {
       file = `arena-os-submissions-${span}`;
     }
     downloadCsv(file, rows);
-    toast.success("CSV exported.");
+    toast.success(t("CSV exported."));
   }
 
   const stepClass =
@@ -299,23 +307,24 @@ export function ReportsView() {
     <div className="print-root">
       <style>{PRINT_CSS}</style>
       <PageHeader
-        eyebrow={wide ? "Company reporting" : (i.deptById.get(deptId)?.name ?? "Department reporting")}
-        title="Daily Reports"
-        sub="Every figure is calculated live from tasks, timers and activity logs. Nothing is typed in by hand."
+        eyebrow={wide ? t("Company reporting") : (i.deptById.get(deptId)?.name ?? t("Department reporting"))}
+        title={t("Daily Reports")}
+        sub={t("Every figure is calculated live from tasks, timers and activity logs. Nothing is typed in by hand.")}
       >
         <Btn onClick={exportCsv}>
           <Download className="size-4" />
-          Export CSV
+          {t("Export CSV")}
         </Btn>
         <Btn onClick={() => window.print()}>
           <Printer className="size-4" />
-          Print / PDF
+          {t("Print / PDF")}
         </Btn>
       </PageHeader>
 
       <p className="mb-4 hidden text-sm print:block">
-        {TAB_TITLE[active]} · {period === "day" ? fmtKeyLong(anchor) : `${fmtKeyLong(from)} to ${fmtKeyLong(to)}`} ·
-        Asia/Beirut business dates · Demonstration data
+        {t(TAB_TITLE[active])} ·{" "}
+        {period === "day" ? fmtKeyLong(anchor) : t("{from} to {to}", { from: fmtKeyLong(from), to: fmtKeyLong(to) })} ·{" "}
+        {t("Asia/Beirut business dates")} · {t("Demonstration data")}
       </p>
 
       <div className="no-print mb-5 flex flex-wrap items-center justify-between gap-3">
@@ -326,37 +335,37 @@ export function ReportsView() {
             value={period}
             onChange={setPeriod}
             options={[
-              { value: "day", label: "Daily" },
-              { value: "week", label: "Weekly" },
-              { value: "month", label: "Monthly" },
+              { value: "day", label: t("Daily") },
+              { value: "week", label: t("Weekly") },
+              { value: "month", label: t("Monthly") },
             ]}
           />
           <div className="glass flex items-center rounded-full p-1">
             <button
               type="button"
-              aria-label="Previous day"
+              aria-label={t("Previous day")}
               disabled={anchor <= minDay}
               onClick={() => setPicked(addDays(anchor, -1))}
               className={stepClass}
             >
-              <ChevronLeft className="size-4" />
+              <ChevronLeft className="size-4 rtl:rotate-180" />
             </button>
             <span className="tnum min-w-36 px-2 text-center text-sm font-semibold" aria-live="polite">
               {rangeText}
             </span>
             <button
               type="button"
-              aria-label="Next day"
+              aria-label={t("Next day")}
               disabled={anchor >= today}
               onClick={() => setPicked(addDays(anchor, 1))}
               className={stepClass}
             >
-              <ChevronRight className="size-4" />
+              <ChevronRight className="size-4 rtl:rotate-180" />
             </button>
           </div>
           {anchor !== today && (
             <Btn size="sm" variant="subtle" onClick={() => setPicked(null)}>
-              Back to today
+              {t("Back to today")}
             </Btn>
           )}
         </div>
@@ -499,42 +508,42 @@ function ExecutiveSection({
   return (
     <>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
-        <Stat label="Assigned" value={company.assigned} icon={<ListChecks className="size-4" />} sub="tasks due in this period" />
-        <Stat label="Completed" value={company.completed} tone="brand" icon={<CircleCheck className="size-4" />} />
-        <Stat label="Pending" value={company.pending} icon={<Hourglass className="size-4" />} sub="open, not yet due" />
+        <Stat label={t("Assigned")} value={company.assigned} icon={<ListChecks className="size-4" />} sub={t("tasks due in this period")} />
+        <Stat label={t("Completed")} value={company.completed} tone="brand" icon={<CircleCheck className="size-4" />} />
+        <Stat label={t("Pending")} value={company.pending} icon={<Hourglass className="size-4" />} sub={t("open, not yet due")} />
         <Stat
-          label="Overdue"
+          label={t("Overdue")}
           value={company.overdue}
           tone={company.overdue > 0 ? "crit" : "default"}
           icon={<TriangleAlert className="size-4" />}
-          sub="open past the deadline"
+          sub={t("open past the deadline")}
         />
         <Stat
-          label="Completion rate"
+          label={t("Completion rate")}
           value={company.completion_rate}
           format={pct}
           tone={company.completion_rate >= 75 ? "brand" : company.completion_rate >= 45 ? "warn" : "crit"}
           icon={<Gauge className="size-4" />}
         />
         <Stat
-          label="Active task time"
+          label={t("Active task time")}
           value={company.active_seconds}
           format={fmtDuration}
           icon={<Timer className="size-4" />}
-          sub="timer time, not attendance"
+          sub={t("timer time, not attendance")}
         />
         <Stat
-          label="Avg task duration"
+          label={t("Avg task duration")}
           value={company.avg_seconds}
           format={fmtDuration}
           icon={<Clock className="size-4" />}
-          sub="per completed task"
+          sub={t("per completed task")}
         />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
         <Panel
-          title="Department comparison"
+          title={t("Department comparison")}
           icon={<Building2 className="size-4" />}
           right={
             <Segmented
@@ -543,32 +552,32 @@ function ExecutiveSection({
               value={mode}
               onChange={setMode}
               options={[
-                { value: "rate", label: "Completion" },
-                { value: "volume", label: "Volume" },
+                { value: "rate", label: t("Completion") },
+                { value: "volume", label: t("Volume") },
               ]}
             />
           }
         >
           {company.assigned === 0 ? (
-            <Empty icon={<Building2 className="size-6" />} title="No tasks in this period" hint="Pick another day or a longer period." />
+            <Empty icon={<Building2 className="size-6" />} title={t("No tasks in this period")} hint={t("Pick another day or a longer period.")} />
           ) : (
             <>
               <Keys
                 items={
                   mode === "rate"
                     ? [
-                        ["75% and above", "#22c73f"],
-                        ["45% to 74%", "#ffc24b"],
-                        ["Below 45%", "#ff4d5e"],
+                        [t("75% and above"), "#22c73f"],
+                        [t("45% to 74%"), "#ffc24b"],
+                        [t("Below 45%"), "#ff4d5e"],
                       ]
                     : [
-                        ["Completed", "#22c73f"],
-                        ["Pending", "#5aa9ff"],
-                        ["Overdue", "#ff4d5e"],
+                        [t("Completed"), "#22c73f"],
+                        [t("Pending"), "#5aa9ff"],
+                        [t("Overdue"), "#ff4d5e"],
                       ]
                 }
               />
-              <div className="rv-chart mt-3 h-[270px] min-w-0">
+              <div className="rv-chart mt-3 h-[270px] min-w-0" dir="ltr">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={chart} margin={{ top: 8, right: 4, left: -14, bottom: 0 }} barCategoryGap="24%">
                     <CartesianGrid stroke={GRID} vertical={false} />
@@ -586,7 +595,7 @@ function ExecutiveSection({
                     {mode === "rate" ? (
                       <Bar
                         dataKey="rate"
-                        name="Completion rate"
+                        name={t("Completion rate")}
                         fill="#22c73f"
                         radius={[8, 8, 0, 0]}
                         maxBarSize={44}
@@ -600,9 +609,9 @@ function ExecutiveSection({
                       </Bar>
                     ) : (
                       <>
-                        <Bar dataKey="completed" name="Completed" stackId="v" fill="#22c73f" maxBarSize={44} className="cursor-pointer" isAnimationActive={!reduce} onClick={pick} />
-                        <Bar dataKey="pending" name="Pending" stackId="v" fill="#5aa9ff" maxBarSize={44} className="cursor-pointer" isAnimationActive={!reduce} onClick={pick} />
-                        <Bar dataKey="overdue" name="Overdue" stackId="v" fill="#ff4d5e" radius={[8, 8, 0, 0]} maxBarSize={44} className="cursor-pointer" isAnimationActive={!reduce} onClick={pick} />
+                        <Bar dataKey="completed" name={t("Completed")} stackId="v" fill="#22c73f" maxBarSize={44} className="cursor-pointer" isAnimationActive={!reduce} onClick={pick} />
+                        <Bar dataKey="pending" name={t("Pending")} stackId="v" fill="#5aa9ff" maxBarSize={44} className="cursor-pointer" isAnimationActive={!reduce} onClick={pick} />
+                        <Bar dataKey="overdue" name={t("Overdue")} stackId="v" fill="#ff4d5e" radius={[8, 8, 0, 0]} maxBarSize={44} className="cursor-pointer" isAnimationActive={!reduce} onClick={pick} />
                       </>
                     )}
                   </BarChart>
@@ -610,9 +619,17 @@ function ExecutiveSection({
               </div>
               {ranked.length > 1 && (
                 <p className="mt-3 text-xs text-paper/60">
-                  Leading: <b className="text-brand-soft">{ranked[0].department_name}</b> at {pct(ranked[0].completion_rate)}. Needs
-                  support: <b className="text-paper">{ranked[ranked.length - 1].department_name}</b> at{" "}
-                  {pct(ranked[ranked.length - 1].completion_rate)}. Select a bar to open that department.
+                  {rich(
+                    t(
+                      "Leading: {lead} at {leadRate}. Needs support: {lag} at {lagRate}. Select a bar to open that department.",
+                    ),
+                    {
+                      lead: <b className="text-brand-soft">{ranked[0].department_name}</b>,
+                      leadRate: pct(ranked[0].completion_rate),
+                      lag: <b className="text-paper">{ranked[ranked.length - 1].department_name}</b>,
+                      lagRate: pct(ranked[ranked.length - 1].completion_rate),
+                    },
+                  )}
                 </p>
               )}
             </>
@@ -620,63 +637,63 @@ function ExecutiveSection({
         </Panel>
 
         <Panel
-          title="Daily performance trend"
+          title={t("Daily performance trend")}
           icon={<TrendingUp className="size-4" />}
           right={
             <Keys
               items={[
-                ["Completion rate", "#22c73f"],
-                ["Completed", "#5aa9ff"],
-                ["Overdue", "#ff4d5e"],
+                [t("Completion rate"), "#22c73f"],
+                [t("Completed"), "#5aa9ff"],
+                [t("Overdue"), "#ff4d5e"],
               ]}
             />
           }
         >
           {trend.every((p) => p.assigned === 0) ? (
-            <Empty icon={<TrendingUp className="size-6" />} title="No history yet" hint="The trend fills in as days are completed." />
+            <Empty icon={<TrendingUp className="size-6" />} title={t("No history yet")} hint={t("The trend fills in as days are completed.")} />
           ) : (
             <>
               <TrendChart data={trend} />
               <p className="mt-3 text-xs text-paper/60">
-                {period === "day" ? "The 14 days up to the selected day." : "Each day in the selected period."} A task counts
-                on the business day of its deadline.
+                {period === "day" ? t("The 14 days up to the selected day.") : t("Each day in the selected period.")}{" "}
+                {t("A task counts on the business day of its deadline.")}
               </p>
             </>
           )}
         </Panel>
       </div>
 
-      <Panel title="Department breakdown" icon={<ListChecks className="size-4" />}>
+      <Panel title={t("Department breakdown")} icon={<ListChecks className="size-4" />}>
         <DepartmentTable totals={totals} onPick={onOpenDepartment} />
       </Panel>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Panel
-          title="Operational bottlenecks"
+          title={t("Operational bottlenecks")}
           icon={<Activity className="size-4" />}
-          right={<span className="text-xs text-paper/50">live, right now</span>}
+          right={<span className="text-xs text-paper/50">{t("live, right now")}</span>}
         >
-          <AttentionList items={bottlenecks} empty="No department is holding work up right now." />
+          <AttentionList items={bottlenecks} empty={t("No department is holding work up right now.")} />
         </Panel>
         <Panel
-          title="Overdue critical tasks"
+          title={t("Overdue critical tasks")}
           icon={<Siren className="size-4" />}
-          right={<span className="text-xs text-paper/50">live, right now</span>}
+          right={<span className="text-xs text-paper/50">{t("live, right now")}</span>}
         >
-          <AttentionList items={criticalOverdue} empty="No critical task is past its deadline." />
+          <AttentionList items={criticalOverdue} empty={t("No critical task is past its deadline.")} />
         </Panel>
       </div>
 
       <Panel
-        title="Manager submissions"
+        title={t("Manager submissions")}
         icon={<Send className="size-4" />}
         right={
           <span className="tnum text-sm font-semibold text-paper/70">
-            {submitted.size}/{db.departments.length} submitted
+            {t("{done}/{total} submitted", { done: submitted.size, total: db.departments.length })}
           </span>
         }
       >
-        <p className="mb-3 text-sm text-paper/55">Daily department reports for {fmtKeyLong(anchor)}.</p>
+        <p className="mb-3 text-sm text-paper/55">{t("Daily department reports for {date}.", { date: fmtKeyLong(anchor) })}</p>
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
           {db.departments.map((d) => {
             const r = submitted.get(d.id);
@@ -699,7 +716,7 @@ function ExecutiveSection({
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold">{d.name}</p>
                   <p className="text-xs text-paper/55">
-                    {r ? `${r.status === "reviewed" ? "Reviewed" : "Submitted"} · ${fmtTime(r.submitted_at)}` : "Not submitted yet"}
+                    {r ? `${r.status === "reviewed" ? t("Reviewed") : t("Submitted")} · ${fmtTime(r.submitted_at)}` : t("Not submitted yet")}
                   </p>
                 </div>
               </div>
@@ -709,12 +726,15 @@ function ExecutiveSection({
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/8 bg-white/[0.025] px-3 py-2.5">
           <p className="text-sm text-paper/75">
             {exec
-              ? `Daily venue report submitted at ${fmtTime(exec.submitted_at)} by ${i.userById.get(exec.submitted_by)?.name ?? "the Operations Manager"}.`
-              : "The consolidated daily venue report has not been submitted for this day."}
+              ? t("Daily venue report submitted at {time} by {name}.", {
+                  time: fmtTime(exec.submitted_at),
+                  name: i.userById.get(exec.submitted_by)?.name ?? t("the Operations Manager"),
+                })
+              : t("The consolidated daily venue report has not been submitted for this day.")}
           </p>
           <Btn size="sm" className="no-print" onClick={onOpenSubmissions}>
-            Open submissions
-            <ChevronRight className="size-3.5" />
+            {t("Open submissions")}
+            <ChevronRight className="size-3.5 rtl:rotate-180" />
           </Btn>
         </div>
       </Panel>
@@ -759,7 +779,13 @@ function DepartmentsSection({
   const manager = dept ? i.userById.get(dept.manager_id ?? "") : undefined;
 
   if (!canViewDepartment(me, deptId)) {
-    return <Empty icon={<Building2 className="size-6" />} title="Not your department" hint="You can only open reports for your own department." />;
+    return (
+      <Empty
+        icon={<Building2 className="size-6" />}
+        title={t("Not your department")}
+        hint={t("You can only open reports for your own department.")}
+      />
+    );
   }
 
   return (
@@ -779,11 +805,11 @@ function DepartmentsSection({
           <Ring value={snap.completion_rate / 100} size={112} stroke={9} color={rateColor(snap.completion_rate)}>
             <div className="text-center">
               <p className="tnum font-display text-3xl leading-none font-bold italic">{pct(snap.completion_rate)}</p>
-              <p className="mt-1 text-[10px] tracking-[0.14em] text-paper/50 uppercase">Done</p>
+              <p className="mt-1 text-[10px] tracking-[0.14em] text-paper/50 uppercase">{t("Done")}</p>
             </div>
           </Ring>
           <div className="min-w-0 flex-1">
-            <p className="eyebrow">Department report</p>
+            <p className="eyebrow">{t("Department report")}</p>
             <h2 className="display mt-1.5 text-3xl">{snap.department_name}</h2>
             {dept && <p className="mt-2 text-sm text-paper/60">{dept.description}</p>}
             {manager && (
@@ -796,38 +822,38 @@ function DepartmentsSection({
           {canSubmitDepartmentReport(me, deptId) && (
             <Btn variant="primary" className="no-print" onClick={onOpenSubmissions}>
               <Send className="size-4" />
-              Review and submit report
+              {t("Review and submit report")}
             </Btn>
           )}
         </div>
         <TotalsGrid t={snap} className="mt-5" />
       </Panel>
 
-      <Panel title="Employee breakdown" icon={<Users className="size-4" />}>
+      <Panel title={t("Employee breakdown")} icon={<Users className="size-4" />}>
         <EmployeeTable db={db} rows={snap.employees} />
       </Panel>
 
       <div className="grid gap-4 lg:grid-cols-[1.35fr_1fr]">
         <Panel
-          title="Daily performance"
+          title={t("Daily performance")}
           icon={<TrendingUp className="size-4" />}
           right={
             <Keys
               items={[
-                ["Completion rate", "#22c73f"],
-                ["Completed", "#5aa9ff"],
-                ["Overdue", "#ff4d5e"],
+                [t("Completion rate"), "#22c73f"],
+                [t("Completed"), "#5aa9ff"],
+                [t("Overdue"), "#ff4d5e"],
               ]}
             />
           }
         >
           {trend.every((p) => p.assigned === 0) ? (
-            <Empty icon={<TrendingUp className="size-6" />} title="No tasks in this period" />
+            <Empty icon={<TrendingUp className="size-6" />} title={t("No tasks in this period")} />
           ) : (
             <TrendChart data={trend} height={240} />
           )}
         </Panel>
-        <Panel title="Tasks requiring follow-up" icon={<Flag className="size-4" />}>
+        <Panel title={t("Tasks requiring follow-up")} icon={<Flag className="size-4" />}>
           <FollowUps items={snap.follow_up} />
         </Panel>
       </div>
@@ -876,7 +902,7 @@ function EmployeesSection({
       {wide && (
         <div className="no-print flex gap-2 overflow-x-auto pb-1">
           <Chip active={!empDept} onClick={() => setEmpDept(null)}>
-            All departments
+            {t("All departments")}
           </Chip>
           {db.departments.map((d) => (
             <Chip key={d.id} active={d.id === empDept} onClick={() => setEmpDept(d.id)}>
@@ -886,11 +912,16 @@ function EmployeesSection({
         </div>
       )}
       <Panel
-        title={wide ? "Employee performance" : "My team"}
+        title={wide ? t("Employee performance") : t("My team")}
         icon={<Users className="size-4" />}
         right={
           <span className="tnum text-xs text-paper/55">
-            {rows.length} people · {sum.completed}/{sum.assigned} tasks completed · {fmtDuration(sum.active)} active
+            {t("{n} people · {done}/{total} tasks completed · {time} active", {
+              n: rows.length,
+              done: sum.completed,
+              total: sum.assigned,
+              time: fmtDuration(sum.active),
+            })}
           </span>
         }
       >
@@ -937,22 +968,24 @@ function ManagerSubmissions({
   return (
     <>
       <Panel
-        title="Daily department report"
+        title={t("Daily department report")}
         icon={<FileText className="size-4" />}
         right={
           existing ? (
             <Pill tone="brand">
               <Check className="size-3" />
-              {existing.status === "reviewed" ? "Reviewed by the GM" : `Submitted at ${fmtTime(existing.submitted_at)}`}
+              {existing.status === "reviewed"
+                ? t("Reviewed by the GM")
+                : t("Submitted at {time}", { time: fmtTime(existing.submitted_at) })}
             </Pill>
           ) : (
-            <Pill tone="warn">Not submitted yet</Pill>
+            <Pill tone="warn">{t("Not submitted yet")}</Pill>
           )
         }
       >
         <p className="text-sm text-paper/60">
-          {fmtKeyLong(anchor)} · {live.department_name}. Generated automatically from your team&apos;s tasks and timers, so
-          nobody has to write it up.
+          {fmtKeyLong(anchor)} · {live.department_name}.{" "}
+          {t("Generated automatically from your team's tasks and timers, so nobody has to write it up.")}
         </p>
         <div className="mt-4">
           <SnapshotView db={db} snap={live} />
@@ -962,7 +995,7 @@ function ManagerSubmissions({
           (open ? (
             <div className="no-print mt-5 rounded-2xl border border-white/8 bg-white/[0.025] p-3.5">
               <label htmlFor="manager-notes" className="text-[11px] font-semibold tracking-[0.14em] text-paper/55 uppercase">
-                Manager notes (optional)
+                {t("Manager notes (optional)")}
               </label>
               <textarea
                 id="manager-notes"
@@ -970,15 +1003,15 @@ function ManagerSubmissions({
                 value={notes}
                 maxLength={600}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="Anything the Operations Manager should know about this day"
+                placeholder={t("Anything the Operations Manager should know about this day")}
               />
               <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
                 <p className="max-w-xl text-xs text-paper/55">
                   {existing
                     ? changed
-                      ? "The numbers have changed since you submitted. Resubmit to send the latest figures."
-                      : "Already with the Operations Manager. You can resubmit if anything changes."
-                    : "Submitting freezes these figures and sends them to the Operations Manager."}
+                      ? t("The numbers have changed since you submitted. Resubmit to send the latest figures.")
+                      : t("Already with the Operations Manager. You can resubmit if anything changes.")
+                    : t("Submitting freezes these figures and sends them to the Operations Manager.")}
                 </p>
                 <Btn
                   variant="primary"
@@ -987,22 +1020,22 @@ function ManagerSubmissions({
                   }}
                 >
                   <Send className="size-4" />
-                  {existing ? "Resubmit report" : "Submit report"}
+                  {existing ? t("Resubmit report") : t("Submit report")}
                 </Btn>
               </div>
-              <AnimatePresence>{sent && <SuccessNote text="Report sent to the Operations Manager." />}</AnimatePresence>
+              <AnimatePresence>{sent && <SuccessNote text={t("Report sent to the Operations Manager.")} />}</AnimatePresence>
             </div>
           ) : (
             <p className="mt-4 text-xs text-paper/50">
-              Reports can be submitted for today and yesterday. Earlier days are read-only.
+              {t("Reports can be submitted for today and yesterday. Earlier days are read-only.")}
             </p>
           ))}
-        {existing?.manager_notes && <NotesBlock label="Notes sent with this report" text={existing.manager_notes} className="mt-3" />}
+        {existing?.manager_notes && <NotesBlock label={t("Notes sent with this report")} text={existing.manager_notes} className="mt-3" />}
       </Panel>
 
-      <Panel title="Past submissions" icon={<CalendarClock className="size-4" />}>
+      <Panel title={t("Past submissions")} icon={<CalendarClock className="size-4" />}>
         {past.length === 0 ? (
-          <Empty icon={<CalendarClock className="size-6" />} title="No earlier reports" hint="Submitted reports are kept here." />
+          <Empty icon={<CalendarClock className="size-6" />} title={t("No earlier reports")} hint={t("Submitted reports are kept here.")} />
         ) : (
           <div className="space-y-2">
             {past.slice(0, 14).map((r) => (
@@ -1048,19 +1081,19 @@ function CompanySubmissions({
 
   const departmentReports = (
     <Panel
-      title="Department reports"
+      title={t("Department reports")}
       icon={<Building2 className="size-4" />}
       right={
         <span className="tnum text-sm font-semibold text-paper/70">
-          {reports.size}/{db.departments.length} submitted
+          {t("{done}/{total} submitted", { done: reports.size, total: db.departments.length })}
         </span>
       }
     >
       <p className="mb-3 text-sm text-paper/60">
         {fmtKeyLong(anchor)}.{" "}
         {isGm
-          ? "Open a report to review the manager's figures and notes, then mark it reviewed."
-          : "What each department manager submitted. Read-only."}
+          ? t("Open a report to review the manager's figures and notes, then mark it reviewed.")
+          : t("What each department manager submitted. Read-only.")}
       </p>
       <div className="space-y-2">
         {db.departments.map((d) => {
@@ -1077,20 +1110,20 @@ function CompanySubmissions({
 
   const executiveReports = (
     <Panel
-      title={isGm ? "Daily venue reports sent" : "Daily venue reports"}
+      title={isGm ? t("Daily venue reports sent") : t("Daily venue reports")}
       icon={<FileText className="size-4" />}
-      right={<span className="tnum text-xs text-paper/55">{history.length} on record</span>}
+      right={<span className="tnum text-xs text-paper/55">{t("{n} on record", { n: history.length })}</span>}
     >
       {!exec && (
         <p className="mb-3 flex items-center gap-2 rounded-xl border border-warn/25 bg-warn/[0.07] px-3 py-2.5 text-sm text-warn">
           <Clock className="size-4 shrink-0" />
           {isGm
-            ? `You have not sent the daily venue report for ${fmtKey(anchor)} yet.`
-            : `The Operations Manager has not submitted the daily venue report for ${fmtKey(anchor)} yet.`}
+            ? t("You have not sent the daily venue report for {date} yet.", { date: fmtKey(anchor) })
+            : t("The Operations Manager has not submitted the daily venue report for {date} yet.", { date: fmtKey(anchor) })}
         </p>
       )}
       {history.length === 0 ? (
-        <Empty icon={<FileText className="size-6" />} title="No daily venue reports yet" />
+        <Empty icon={<FileText className="size-6" />} title={t("No daily venue reports yet")} />
       ) : (
         <div className="space-y-2">
           {history.slice(0, 15).map((r) => (
@@ -1115,35 +1148,46 @@ function CompanySubmissions({
       {departmentReports}
 
       <Panel
-        title="Consolidated daily venue report"
+        title={t("Consolidated daily venue report")}
         icon={<Send className="size-4" />}
         right={
           exec ? (
             <Pill tone="brand">
               <Check className="size-3" />
-              Submitted at {fmtTime(exec.submitted_at)}
+              {t("Submitted at {time}", { time: fmtTime(exec.submitted_at) })}
             </Pill>
           ) : (
-            <Pill tone="warn">Not submitted yet</Pill>
+            <Pill tone="warn">{t("Not submitted yet")}</Pill>
           )
         }
       >
         <p className="text-sm text-paper/60">
-          Combines every department report submitted for {fmtKey(anchor)} into one report for the Owner.
+          {t("Combines every department report submitted for {date} into one report for the Owner.", { date: fmtKey(anchor) })}
         </p>
         <TotalsGrid t={preview} className="mt-4" />
         {preview.missing_departments.length > 0 && (
           <p className="mt-3 flex items-start gap-2 text-xs text-warn">
             <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
-            <span>Not submitted yet: {preview.missing_departments.join(", ")}. They will be listed as missing in the report.</span>
+            <span>
+              {t("Not submitted yet: {list}. They will be listed as missing in the report.", {
+                list: preview.missing_departments.join(", "),
+              })}
+            </span>
           </p>
         )}
         {preview.overdue_critical.length > 0 && (
           <p className="mt-2 flex items-start gap-2 text-xs text-crit">
             <Siren className="mt-0.5 size-3.5 shrink-0" />
             <span>
-              {preview.overdue_critical.length} critical {preview.overdue_critical.length === 1 ? "task is" : "tasks are"} overdue:{" "}
-              {preview.overdue_critical.map((t) => `${t.title} (${t.department_name})`).join("; ")}.
+              {t(
+                preview.overdue_critical.length === 1
+                  ? "1 critical task is overdue: {list}."
+                  : "{n} critical tasks are overdue: {list}.",
+                {
+                  n: preview.overdue_critical.length,
+                  list: preview.overdue_critical.map((c) => `${c.title} (${c.department_name})`).join("; "),
+                },
+              )}
             </span>
           </p>
         )}
@@ -1151,7 +1195,7 @@ function CompanySubmissions({
         {open ? (
           <div className="no-print mt-5 rounded-2xl border border-white/8 bg-white/[0.025] p-3.5">
             <label htmlFor="executive-notes" className="text-[11px] font-semibold tracking-[0.14em] text-paper/55 uppercase">
-              Notes for the Owner (optional)
+              {t("Notes for the Owner (optional)")}
             </label>
             <textarea
               id="executive-notes"
@@ -1159,15 +1203,17 @@ function CompanySubmissions({
               value={notes}
               maxLength={800}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Summary, risks and decisions needed"
+              placeholder={t("Summary, risks and decisions needed")}
             />
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
               <p className="max-w-xl text-xs text-paper/55">
                 {reports.size === 0
-                  ? "Waiting for at least one department report before this can be sent."
+                  ? t("Waiting for at least one department report before this can be sent.")
                   : exec
-                    ? "Already sent. Resubmit to include reports that arrived later."
-                    : `${reports.size} department ${reports.size === 1 ? "report" : "reports"} will be included and marked reviewed.`}
+                    ? t("Already sent. Resubmit to include reports that arrived later.")
+                    : reports.size === 1
+                      ? t("1 department report will be included and marked reviewed.")
+                      : t("{n} department reports will be included and marked reviewed.", { n: reports.size })}
               </p>
               <Btn
                 variant="primary"
@@ -1177,14 +1223,14 @@ function CompanySubmissions({
                 }}
               >
                 <Send className="size-4" />
-                {exec ? "Resubmit daily venue report" : "Submit consolidated daily venue report"}
+                {exec ? t("Resubmit daily venue report") : t("Submit consolidated daily venue report")}
               </Btn>
             </div>
-            <AnimatePresence>{sent && <SuccessNote text="Daily venue report sent to the Owner." />}</AnimatePresence>
+            <AnimatePresence>{sent && <SuccessNote text={t("Daily venue report sent to the Owner.")} />}</AnimatePresence>
           </div>
         ) : (
           <p className="mt-4 text-xs text-paper/50">
-            Daily venue reports can be submitted for today and yesterday. Earlier days are read-only.
+            {t("Daily venue reports can be submitted for today and yesterday. Earlier days are read-only.")}
           </p>
         )}
       </Panel>
@@ -1221,26 +1267,31 @@ function DailyReportCard({
               <span className="font-normal text-paper/50"> · {fmtKey(report.report_date)}</span>
             </span>
             <span className="block truncate text-xs text-paper/55">
-              Submitted at {fmtTime(report.submitted_at)} by {by?.name ?? "the manager"} · {snap.completed}/{snap.assigned} tasks
+              {t("Submitted at {time} by {name} · {done}/{total} tasks", {
+                time: fmtTime(report.submitted_at),
+                name: by?.name ?? t("the manager"),
+                done: snap.completed,
+                total: snap.assigned,
+              })}
             </span>
           </span>
           <span className="tnum text-sm font-bold" style={{ color: rateColor(snap.completion_rate) }}>
             {pct(snap.completion_rate)}
           </span>
           <Pill tone={report.status === "reviewed" ? "brand" : "warn"}>
-            {report.status === "reviewed" ? "Reviewed" : "Awaiting review"}
+            {report.status === "reviewed" ? t("Reviewed") : t("Awaiting review")}
           </Pill>
         </span>
       }
     >
-      <p className="mb-3 text-xs text-paper/50">Figures frozen at the moment the report was submitted.</p>
+      <p className="mb-3 text-xs text-paper/50">{t("Figures frozen at the moment the report was submitted.")}</p>
       <SnapshotView db={db} snap={snap} />
-      {report.manager_notes && <NotesBlock label="Manager notes" text={report.manager_notes} className="mt-3" />}
+      {report.manager_notes && <NotesBlock label={t("Manager notes")} text={report.manager_notes} className="mt-3" />}
       {canReview && report.status === "submitted" && (
         <div className="no-print mt-3 flex justify-end">
           <Btn variant="primary" size="sm" onClick={() => actions.reviewDailyReport(report.id)}>
             <Check className="size-4" />
-            Mark reviewed
+            {t("Mark reviewed")}
           </Btn>
         </div>
       )}
@@ -1260,8 +1311,16 @@ function ExecutiveReportCard({ db, report, defaultOpen }: { db: Database; report
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-semibold">{fmtKeyLong(report.report_date)}</span>
             <span className="block truncate text-xs text-paper/55">
-              Submitted at {fmtTime(report.submitted_at)} by {by?.name ?? "the Operations Manager"} ·{" "}
-              {report.department_report_ids.length} department {report.department_report_ids.length === 1 ? "report" : "reports"}
+              {t(
+                report.department_report_ids.length === 1
+                  ? "Submitted at {time} by {name} · 1 department report"
+                  : "Submitted at {time} by {name} · {n} department reports",
+                {
+                  time: fmtTime(report.submitted_at),
+                  name: by?.name ?? t("the Operations Manager"),
+                  n: report.department_report_ids.length,
+                },
+              )}
             </span>
           </span>
           <span className="tnum text-sm font-bold" style={{ color: rateColor(snap.completion_rate) }}>
@@ -1270,16 +1329,16 @@ function ExecutiveReportCard({ db, report, defaultOpen }: { db: Database; report
         </span>
       }
     >
-      <p className="mb-3 text-xs text-paper/50">Company figures frozen at the moment the report was submitted.</p>
+      <p className="mb-3 text-xs text-paper/50">{t("Company figures frozen at the moment the report was submitted.")}</p>
       <TotalsGrid t={snap} />
       <div className="mt-4">
         <DepartmentTable totals={snap.departments} />
       </div>
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         <div className="rounded-xl border border-white/8 bg-white/[0.025] p-3">
-          <p className="text-[11px] font-semibold tracking-[0.14em] text-paper/55 uppercase">Overdue critical tasks</p>
+          <p className="text-[11px] font-semibold tracking-[0.14em] text-paper/55 uppercase">{t("Overdue critical tasks")}</p>
           {snap.overdue_critical.length === 0 ? (
-            <p className="mt-2 text-sm text-paper/60">None at submission.</p>
+            <p className="mt-2 text-sm text-paper/60">{t("None at submission.")}</p>
           ) : (
             <ul className="mt-2 space-y-1.5 text-sm">
               {snap.overdue_critical.map((t) => (
@@ -1294,13 +1353,13 @@ function ExecutiveReportCard({ db, report, defaultOpen }: { db: Database; report
           )}
         </div>
         <div className="rounded-xl border border-white/8 bg-white/[0.025] p-3">
-          <p className="text-[11px] font-semibold tracking-[0.14em] text-paper/55 uppercase">Departments not submitted</p>
+          <p className="text-[11px] font-semibold tracking-[0.14em] text-paper/55 uppercase">{t("Departments not submitted")}</p>
           <p className="mt-2 text-sm text-paper/75">
-            {snap.missing_departments.length === 0 ? "All departments reported." : snap.missing_departments.join(", ")}
+            {snap.missing_departments.length === 0 ? t("All departments reported.") : snap.missing_departments.join(", ")}
           </p>
         </div>
       </div>
-      {report.executive_notes && <NotesBlock label="Operations Manager's notes" text={report.executive_notes} className="mt-3" />}
+      {report.executive_notes && <NotesBlock label={t("Operations Manager's notes")} text={report.executive_notes} className="mt-3" />}
     </Expandable>
   );
 }
@@ -1311,11 +1370,11 @@ function MissingRow({ dept, manager }: { dept: Department; manager?: User }) {
       <Avatar user={manager} size={30} />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold">{dept.name}</p>
-        <p className="truncate text-xs text-paper/55">{manager ? `${manager.name} has not submitted yet` : "Not submitted yet"}</p>
+        <p className="truncate text-xs text-paper/55">{manager ? t("{name} has not submitted yet", { name: manager.name }) : t("Not submitted yet")}</p>
       </div>
       <Pill tone="muted">
         <Clock className="size-3" />
-        Missing
+        {t("Missing")}
       </Pill>
     </div>
   );
@@ -1328,11 +1387,11 @@ function SnapshotView({ db, snap }: { db: Database; snap: DepartmentSnapshot }) 
     <div className="space-y-4">
       <TotalsGrid t={snap} />
       <div>
-        <p className="mb-2 text-[11px] font-semibold tracking-[0.14em] text-paper/55 uppercase">Employee breakdown</p>
+        <p className="mb-2 text-[11px] font-semibold tracking-[0.14em] text-paper/55 uppercase">{t("Employee breakdown")}</p>
         <EmployeeTable db={db} rows={snap.employees} />
       </div>
       <div>
-        <p className="mb-2 text-[11px] font-semibold tracking-[0.14em] text-paper/55 uppercase">Tasks requiring follow-up</p>
+        <p className="mb-2 text-[11px] font-semibold tracking-[0.14em] text-paper/55 uppercase">{t("Tasks requiring follow-up")}</p>
         <FollowUps items={snap.follow_up} />
       </div>
     </div>
@@ -1344,7 +1403,7 @@ function FollowUps({ items }: { items: DepartmentSnapshot["follow_up"] }) {
     return (
       <p className="flex items-center gap-2 rounded-xl border border-white/8 bg-white/[0.025] px-3 py-2.5 text-sm text-paper/65">
         <ShieldCheck className="size-4 shrink-0 text-brand" />
-        Nothing needs follow-up.
+        {t("Nothing needs follow-up.")}
       </p>
     );
   }
@@ -1376,7 +1435,7 @@ const KIND_LABEL: Record<AttentionItem["kind"], string> = {
 };
 
 function AttentionList({ items, empty }: { items: AttentionItem[]; empty: string }) {
-  if (items.length === 0) return <Empty icon={<ShieldCheck className="size-6" />} title="All clear" hint={empty} />;
+  if (items.length === 0) return <Empty icon={<ShieldCheck className="size-6" />} title={t("All clear")} hint={empty} />;
   return (
     <>
       <ul className="space-y-2">
@@ -1386,13 +1445,13 @@ function AttentionList({ items, empty }: { items: AttentionItem[]; empty: string
             <div className="min-w-0">
               <p className="text-sm font-semibold">{a.title}</p>
               <p className="text-xs text-paper/60">
-                <span className="font-semibold text-paper/75">{KIND_LABEL[a.kind]}.</span> {a.detail}
+                <span className="font-semibold text-paper/75">{t(KIND_LABEL[a.kind])}.</span> {a.detail}
               </p>
             </div>
           </li>
         ))}
       </ul>
-      {items.length > 8 && <p className="mt-2 text-xs text-paper/50">and {items.length - 8} more</p>}
+      {items.length > 8 && <p className="mt-2 text-xs text-paper/50">{t("and {n} more", { n: items.length - 8 })}</p>}
     </>
   );
 }
@@ -1409,7 +1468,7 @@ function Metric({ label, value, color }: { label: string; value: ReactNode; colo
 }
 
 function TotalsGrid({
-  t,
+  t: v,
   className,
 }: {
   t: {
@@ -1425,13 +1484,17 @@ function TotalsGrid({
 }) {
   return (
     <div className={cn("grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-7", className)}>
-      <Metric label="Assigned" value={t.assigned} />
-      <Metric label="Completed" value={t.completed} color="#22c73f" />
-      <Metric label="Pending" value={t.pending} />
-      <Metric label="Overdue" value={t.overdue} color={t.overdue > 0 ? "#ff4d5e" : undefined} />
-      <Metric label="Completion rate" value={pct(t.completion_rate)} color={t.assigned ? rateColor(t.completion_rate) : undefined} />
-      <Metric label="Active task time" value={fmtDuration(t.active_seconds)} />
-      {t.avg_seconds !== undefined && <Metric label="Avg task duration" value={fmtDuration(t.avg_seconds)} />}
+      <Metric label={t("Assigned")} value={v.assigned} />
+      <Metric label={t("Completed")} value={v.completed} color="#22c73f" />
+      <Metric label={t("Pending")} value={v.pending} />
+      <Metric label={t("Overdue")} value={v.overdue} color={v.overdue > 0 ? "#ff4d5e" : undefined} />
+      <Metric
+        label={t("Completion rate")}
+        value={pct(v.completion_rate)}
+        color={v.assigned ? rateColor(v.completion_rate) : undefined}
+      />
+      <Metric label={t("Active task time")} value={fmtDuration(v.active_seconds)} />
+      {v.avg_seconds !== undefined && <Metric label={t("Avg task duration")} value={fmtDuration(v.avg_seconds)} />}
     </div>
   );
 }
@@ -1448,14 +1511,14 @@ function RateBar({ rate, muted }: { rate: number; muted?: boolean }) {
           transition={{ duration: 0.7, ease: EASE }}
         />
       </div>
-      <span className={cn("tnum w-10 text-right font-semibold", muted && "text-paper/45")}>{muted ? "n/a" : pct(rate)}</span>
+      <span className={cn("tnum w-10 text-end font-semibold", muted && "text-paper/45")}>{muted ? t("n/a") : pct(rate)}</span>
     </div>
   );
 }
 
 const TH = "pb-2.5 text-[11px] font-semibold tracking-[0.12em] text-paper/50 uppercase";
-const TD = "border-t border-white/[0.07] py-2.5 pr-3 align-middle";
-const NUM = `${TD} tnum text-right`;
+const TD = "border-t border-white/[0.07] py-2.5 pe-3 align-middle";
+const NUM = `${TD} tnum text-end`;
 
 function EmployeeTable({
   db,
@@ -1481,14 +1544,16 @@ function EmployeeTable({
     });
   }, [rows, sort]);
 
-  if (rows.length === 0) return <Empty icon={<Users className="size-6" />} title="No one to show" hint="No team members match this view." />;
+  if (rows.length === 0) return (
+      <Empty icon={<Users className="size-6" />} title={t("No one to show")} hint={t("No team members match this view.")} />
+    );
 
   const head = (key: SortKey, label: string, right = true) => (
     <th
       key={key}
       scope="col"
       aria-sort={sort?.key === key ? (sort.dir === 1 ? "ascending" : "descending") : undefined}
-      className={cn(TH, "pr-3", right ? "text-right" : "text-left")}
+      className={cn(TH, "pe-3", right ? "text-end" : "text-start")}
     >
       {onSort ? (
         <button
@@ -1510,19 +1575,19 @@ function EmployeeTable({
       <table className="w-full min-w-[720px] border-collapse text-sm">
         <thead>
           <tr>
-            {head("name", "Employee", false)}
+            {head("name", t("Employee"), false)}
             {showDept && (
-              <th scope="col" className={cn(TH, "pr-3 text-left")}>
-                Department
+              <th scope="col" className={cn(TH, "pe-3 text-start")}>
+                {t("Department")}
               </th>
             )}
-            {head("assigned", "Assigned")}
-            {head("completed", "Completed")}
-            {head("pending", "Pending")}
-            {head("overdue", "Overdue")}
-            {head("active_seconds", "Active time")}
-            {head("avg_seconds", "Avg time")}
-            {head("completion_rate", "Completion")}
+            {head("assigned", t("Assigned"))}
+            {head("completed", t("Completed"))}
+            {head("pending", t("Pending"))}
+            {head("overdue", t("Overdue"))}
+            {head("active_seconds", t("Active time"))}
+            {head("avg_seconds", t("Avg time"))}
+            {head("completion_rate", t("Completion"))}
           </tr>
         </thead>
         <tbody>
@@ -1545,8 +1610,8 @@ function EmployeeTable({
                 <td className={NUM}>{r.pending}</td>
                 <td className={cn(NUM, r.overdue > 0 && "font-semibold text-crit")}>{r.overdue}</td>
                 <td className={NUM}>{fmtDuration(r.active_seconds)}</td>
-                <td className={NUM}>{r.completed ? fmtDuration(r.avg_seconds) : "n/a"}</td>
-                <td className={cn(TD, "pr-0")}>
+                <td className={NUM}>{r.completed ? fmtDuration(r.avg_seconds) : t("n/a")}</td>
+                <td className={cn(TD, "pe-0")}>
                   <RateBar rate={r.completion_rate} muted={r.assigned === 0} />
                 </td>
               </tr>
@@ -1564,13 +1629,13 @@ function DepartmentTable({ totals, onPick }: { totals: DepartmentTotals[]; onPic
       <table className="w-full min-w-[640px] border-collapse text-sm">
         <thead>
           <tr>
-            <th scope="col" className={cn(TH, "pr-3 text-left")}>Department</th>
-            <th scope="col" className={cn(TH, "pr-3 text-right")}>Assigned</th>
-            <th scope="col" className={cn(TH, "pr-3 text-right")}>Completed</th>
-            <th scope="col" className={cn(TH, "pr-3 text-right")}>Pending</th>
-            <th scope="col" className={cn(TH, "pr-3 text-right")}>Overdue</th>
-            <th scope="col" className={cn(TH, "pr-3 text-right")}>Active time</th>
-            <th scope="col" className={cn(TH, "text-right")}>Completion</th>
+            <th scope="col" className={cn(TH, "pe-3 text-start")}>{t("Department")}</th>
+            <th scope="col" className={cn(TH, "pe-3 text-end")}>{t("Assigned")}</th>
+            <th scope="col" className={cn(TH, "pe-3 text-end")}>{t("Completed")}</th>
+            <th scope="col" className={cn(TH, "pe-3 text-end")}>{t("Pending")}</th>
+            <th scope="col" className={cn(TH, "pe-3 text-end")}>{t("Overdue")}</th>
+            <th scope="col" className={cn(TH, "pe-3 text-end")}>{t("Active time")}</th>
+            <th scope="col" className={cn(TH, "text-end")}>{t("Completion")}</th>
           </tr>
         </thead>
         <tbody>
@@ -1581,10 +1646,10 @@ function DepartmentTable({ totals, onPick }: { totals: DepartmentTotals[]; onPic
                   <button
                     type="button"
                     onClick={() => onPick(t.department_id)}
-                    className="inline-flex items-center gap-1 text-left transition hover:text-brand-soft"
+                    className="inline-flex items-center gap-1 text-start transition hover:text-brand-soft"
                   >
                     {t.department_name}
-                    <ChevronRight className="no-print size-3.5 text-paper/40" />
+                    <ChevronRight className="no-print size-3.5 text-paper/40 rtl:rotate-180" />
                   </button>
                 ) : (
                   t.department_name
@@ -1595,7 +1660,7 @@ function DepartmentTable({ totals, onPick }: { totals: DepartmentTotals[]; onPic
               <td className={NUM}>{t.pending}</td>
               <td className={cn(NUM, t.overdue > 0 && "font-semibold text-crit")}>{t.overdue}</td>
               <td className={NUM}>{fmtDuration(t.active_seconds)}</td>
-              <td className={cn(TD, "pr-0")}>
+              <td className={cn(TD, "pe-0")}>
                 <RateBar rate={t.completion_rate} muted={t.assigned === 0} />
               </td>
             </tr>
@@ -1614,7 +1679,7 @@ function Expandable({ header, children, defaultOpen = false }: { header: ReactNo
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="flex w-full items-center gap-3 px-3.5 py-3 text-left transition hover:bg-white/[0.04]"
+        className="flex w-full items-center gap-3 px-3.5 py-3 text-start transition hover:bg-white/[0.04]"
       >
         <span className="min-w-0 flex-1">{header}</span>
         <motion.span animate={{ rotate: open ? 180 : 0 }} transition={{ duration: 0.25 }} className="no-print shrink-0 text-paper/50">
@@ -1655,7 +1720,7 @@ function Pill({ tone, children }: { tone: "brand" | "warn" | "muted"; children: 
 
 function NotesBlock({ label, text, className }: { label: string; text: string; className?: string }) {
   return (
-    <div className={cn("rounded-xl border-l-2 border-brand/60 bg-white/[0.03] px-3 py-2.5", className)}>
+    <div className={cn("rounded-xl border-s-2 border-brand/60 bg-white/[0.03] px-3 py-2.5", className)}>
       <p className="text-[11px] font-semibold tracking-[0.14em] text-paper/55 uppercase">{label}</p>
       <p className="mt-1 text-sm whitespace-pre-wrap text-paper/85">{text}</p>
     </div>
@@ -1723,13 +1788,13 @@ function ChartTip({
   if (!active || !payload || payload.length === 0) return null;
   const full = payload[0]?.payload?.full;
   return (
-    <div className="glass-solid rounded-xl px-3 py-2 text-xs">
+    <div className="glass-solid rounded-xl px-3 py-2 text-xs" dir={isAr() ? "rtl" : "ltr"}>
       <p className="mb-1 font-semibold text-paper">{typeof full === "string" ? full : label}</p>
       {payload.map((p, n) => (
         <p key={n} className="flex items-center gap-2 text-paper/70">
           <span className="size-2 rounded-full" style={{ background: p.color ?? "#22c73f" }} />
           <span>{p.name}</span>
-          <span className="tnum ml-auto pl-4 font-semibold text-paper">
+          <span className="tnum ms-auto ps-4 font-semibold text-paper">
             {String(p.value ?? "")}
             {suffix?.[String(p.dataKey)] ?? ""}
           </span>
@@ -1743,7 +1808,7 @@ function TrendChart({ data, height = 270 }: { data: TrendRow[]; height?: number 
   const gid = useId();
   const reduce = useReducedMotion();
   return (
-    <div className="rv-chart min-w-0" style={{ height }}>
+    <div className="rv-chart min-w-0" dir="ltr" style={{ height }}>
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={data} margin={{ top: 8, right: 0, left: -14, bottom: 0 }}>
           <defs>
@@ -1773,13 +1838,13 @@ function TrendChart({ data, height = 270 }: { data: TrendRow[]; height?: number 
             width={28}
           />
           <Tooltip cursor={{ stroke: "rgba(255,255,255,0.16)" }} content={<ChartTip suffix={{ rate: "%" }} />} />
-          <Bar yAxisId="count" dataKey="completed" name="Completed" fill="rgba(90,169,255,0.5)" radius={[4, 4, 0, 0]} maxBarSize={14} isAnimationActive={!reduce} />
-          <Bar yAxisId="count" dataKey="overdue" name="Overdue" fill="rgba(255,77,94,0.8)" radius={[4, 4, 0, 0]} maxBarSize={14} isAnimationActive={!reduce} />
+          <Bar yAxisId="count" dataKey="completed" name={t("Completed")} fill="rgba(90,169,255,0.5)" radius={[4, 4, 0, 0]} maxBarSize={14} isAnimationActive={!reduce} />
+          <Bar yAxisId="count" dataKey="overdue" name={t("Overdue")} fill="rgba(255,77,94,0.8)" radius={[4, 4, 0, 0]} maxBarSize={14} isAnimationActive={!reduce} />
           <Area
             yAxisId="rate"
             type="monotone"
             dataKey="rate"
-            name="Completion rate"
+            name={t("Completion rate")}
             stroke="#22c73f"
             strokeWidth={2.5}
             fill={`url(#${gid}rate)`}
@@ -1797,21 +1862,26 @@ function TrendChart({ data, height = 270 }: { data: TrendRow[]; height?: number 
 
 function RulesNote() {
   return (
-    <Panel className="mt-4" title="How these numbers are calculated" icon={<Info className="size-4" />}>
+    <Panel className="mt-4" title={t("How these numbers are calculated")} icon={<Info className="size-4" />}>
       <ul className="grid gap-x-8 gap-y-2 text-sm text-paper/65 md:grid-cols-2">
         <li>
-          <b className="text-paper/90">Completion rate</b> = completed tasks ÷ assigned tasks × 100.
+          {rich(t("{term} = completed tasks ÷ assigned tasks × 100."), {
+            term: <b className="text-paper/90">{t("Completion rate")}</b>,
+          })}
         </li>
         <li>
-          <b className="text-paper/90">Average task duration</b> = total duration of completed tasks ÷ number of completed tasks.
+          {rich(t("{term} = total duration of completed tasks ÷ number of completed tasks."), {
+            term: <b className="text-paper/90">{t("Average task duration")}</b>,
+          })}
         </li>
-        <li>A task belongs to the business day of its deadline, in Asia/Beirut time.</li>
+        <li>{t("A task belongs to the business day of its deadline, in Asia/Beirut time.")}</li>
         <li>
-          <b className="text-paper/90">Active task time</b> is time with a task timer running. It is not attendance and not total
-          working hours.
+          {rich(t("{term} is time with a task timer running. It is not attendance and not total working hours."), {
+            term: <b className="text-paper/90">{t("Active task time")}</b>,
+          })}
         </li>
-        <li>Pending means open and not yet due. Overdue means still open after the deadline.</li>
-        <li>A submitted report keeps a frozen copy of its figures from the moment it was sent.</li>
+        <li>{t("Pending means open and not yet due. Overdue means still open after the deadline.")}</li>
+        <li>{t("A submitted report keeps a frozen copy of its figures from the moment it was sent.")}</li>
       </ul>
     </Panel>
   );
