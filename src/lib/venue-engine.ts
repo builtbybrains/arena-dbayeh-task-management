@@ -579,6 +579,8 @@ export function generateRecurring(db: Database, now: number): Database {
     const to = users.get(rule.assigned_to);
     if (!to?.active_status) continue;
     const [h, m] = rule.due_time.split(":").map(Number);
+    // A schedule made after today's due time starts on its next date, not overdue today.
+    if (beirutToUtc(today, h, m) < ms(rule.created_at)) continue;
     fresh.push({
       id,
       title: rule.title,

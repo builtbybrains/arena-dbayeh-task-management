@@ -7,32 +7,26 @@ import {
   CalendarPlus,
   ChevronLeft,
   ChevronRight,
-  ClipboardList,
-  Pause,
   Pencil,
-  Play,
   Plus,
-  Repeat as RepeatIcon,
   Trash2,
   Users,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Avatar, Btn, Empty, PageHeader, Panel, PriorityBadge, Segmented, StatusBadge } from "@/components/kit";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { EventForm, RecurringForm, ReminderForm, WEEKDAYS } from "@/components/venue-dialogs";
+import { EventForm, ReminderForm, WEEKDAYS } from "@/components/venue-dialogs";
 import { t } from "@/lib/i18n";
-import { canManageEvents, canManageRecurring, canViewTask } from "@/lib/permissions";
+import { canManageEvents, canViewTask } from "@/lib/permissions";
 import { idx, isOverdue, sortTasks } from "@/lib/selectors";
 import { actions, useDb, useMe, useNow } from "@/lib/store";
 import { addDays, dateKey, fmtDay, fmtKeyLong, fmtMonth, fmtTime, ms } from "@/lib/time";
-import { AREA_LABEL, EVENT_KIND_COLOR, EVENT_KIND_LABEL, type RecurringTask, type VenueEvent } from "@/lib/types";
+import { AREA_LABEL, EVENT_KIND_COLOR, EVENT_KIND_LABEL, type VenueEvent } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { useUi } from "@/lib/ui";
 import { BUSY_COLOR, BUSY_LABEL, dayLoads, fmtParty, remindersFor, type DayLoad } from "@/lib/venue";
-import { nextRuns } from "@/lib/venue-engine";
 
-type Tab = "month" | "reminders" | "recurring";
-type Modal = { kind: "event"; event: VenueEvent | null } | { kind: "reminder" } | { kind: "recurring"; rule: RecurringTask | null } | null;
+type Tab = "month" | "reminders";
+type Modal = { kind: "event"; event: VenueEvent | null } | { kind: "reminder" } | null;
 
 // Weeks start on Monday at Arena.
 const ORDER = [1, 2, 3, 4, 5, 6, 0];
@@ -41,12 +35,8 @@ export default function CalendarPage() {
   const me = useMe();
   const now = useNow();
   const today = dateKey(now);
-  // Opened from the task board's "Recurring tasks" button: start on that tab.
-  const [tab, setTab] = useState<Tab>(() => {
-    const want = useUi.getState().calendarTab;
-    if (want) useUi.setState({ calendarTab: null });
-    return want && canManageRecurring(me) ? want : "month";
-  });
+  const [tab, setTab] = useState<Tab>("month");
+
   const [selected, setSelected] = useState(today);
   const [month, setMonth] = useState(today.slice(0, 7));
   const [modal, setModal] = useState<Modal>(null);
@@ -55,7 +45,6 @@ export default function CalendarPage() {
   const tabs: { value: Tab; label: string }[] = [
     { value: "month", label: t("Calendar") },
     { value: "reminders", label: t("Reminders") },
-    ...(canManageRecurring(me) ? [{ value: "recurring" as Tab, label: t("Recurring tasks") }] : []),
   ];
 
   return (
@@ -79,13 +68,11 @@ export default function CalendarPage() {
         </div>
       )}
       {tab === "reminders" && <RemindersTab />}
-      {tab === "recurring" && <RecurringTab onEdit={(rule) => setModal({ kind: "recurring", rule })} />}
 
       <Dialog open={modal !== null} onOpenChange={(o) => !o && close()}>
         <DialogContent className="glass-solid block max-h-[92dvh] overflow-x-hidden overflow-y-auto rounded-3xl p-0 sm:max-w-xl">
           {modal?.kind === "event" && <EventForm event={modal.event} date={selected < today ? today : selected} onDone={close} />}
           {modal?.kind === "reminder" && <ReminderForm date={selected} onDone={close} />}
-          {modal?.kind === "recurring" && <RecurringForm rule={modal.rule} onDone={close} />}
         </DialogContent>
       </Dialog>
     </>
@@ -383,76 +370,5 @@ function RemindersTab() {
         )}
       </Panel>
     </div>
-  );
-}
-
-function RecurringTab({ onEdit }: { onEdit: (r: RecurringTask | null) => void }) {
-  const db = useDb();
-  const me = useMe();
-  const now = useNow();
-  const i = idx(db);
-  const today = dateKey(now);
-  const rules = db.recurring.filter(
-    (r) => !r.deleted_at && (me.role === "owner" || me.role === "ops" || r.department_id === me.department_id || r.created_by === me.id),
-  );
-  const describe = (r: RecurringTask) =>
-    r.repeat === "daily"
-      ? t("Every day at {time}", { time: r.due_time })
-      : r.repeat === "weekly"
-        ? t("Every {days} at {time}", { days: r.weekdays.map((d) => t(WEEKDAYS[d])).join(t(", ")), time: r.due_time })
-        : r.repeat === "custom"
-          ? t("{n} chosen dates at {time}", { n: r.dates?.length ?? 0, time: r.due_time })
-          : t("Day {d} of each month at {time}", { d: r.month_day, time: r.due_time });
-  return (
-    <Panel
-      title={t("Recurring tasks")}
-      icon={<RepeatIcon className="size-5" />}
-      right={
-        <Btn size="sm" variant="primary" onClick={() => onEdit(null)}>
-          <Plus className="size-4" /> {t("New")}
-        </Btn>
-      }
-    >
-      {rules.length === 0 ? (
-        <Empty icon={<ClipboardList className="size-6" />} title={t("No recurring tasks yet")} hint={t("For work that repeats every day, week or month, or on dates you pick: opening checks, deep cleans, stock counts.")} />
-      ) : (
-        <ul className="grid gap-2 md:grid-cols-2">
-          {rules.map((r) => {
-            const to = i.userById.get(r.assigned_to);
-            return (
-              <li key={r.id} className={cn("rounded-2xl border border-white/8 bg-white/[0.03] p-3", !r.active && "opacity-55")}>
-                <div className="flex items-start gap-3">
-                  <Avatar user={to} size={34} />
-                  <div className="min-w-0 flex-1">
-                    <p className="font-semibold">{r.title}</p>
-                    <p className="text-xs text-paper/55">
-                      {to?.name} · {describe(r)}
-                    </p>
-                    <p className="tnum mt-1 text-[11px] text-paper/45">
-                      {!r.active
-                        ? t("Paused")
-                        : nextRuns(r, today).length
-                          ? t("Next: {dates}", { dates: nextRuns(r, today).map((k) => fmtDay(`${k}T12:00:00Z`)).join(" · ") })
-                          : t("No dates left. Edit it to add more.")}
-                    </p>
-                  </div>
-                </div>
-                <div className="mt-2 flex justify-end gap-1">
-                  <Btn size="sm" variant="subtle" onClick={() => actions.setRecurringActive(r.id, !r.active)}>
-                    {r.active ? <Pause className="size-3.5" /> : <Play className="size-3.5" />} {r.active ? t("Pause") : t("Resume")}
-                  </Btn>
-                  <Btn size="sm" variant="subtle" onClick={() => onEdit(r)}>
-                    <Pencil className="size-3.5" /> {t("Edit")}
-                  </Btn>
-                  <Btn size="sm" variant="subtle" onClick={() => actions.deleteRecurring(r.id)} aria-label={t("Delete")}>
-                    <Trash2 className="size-3.5" />
-                  </Btn>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </Panel>
   );
 }

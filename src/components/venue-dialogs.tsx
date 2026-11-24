@@ -3,16 +3,17 @@
 // Dialogs for the calendar: book / edit an event (with its prep tasks), set a
 // reminder, and create a recurring task.
 
-import { BellPlus, CalendarPlus, Check, ChevronLeft, ChevronRight, Phone, Repeat as RepeatIcon, Trash2, Users, X } from "lucide-react";
+import { BellPlus, CalendarPlus, Check, Phone, Repeat as RepeatIcon, Trash2, Users } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
 import { Field, Money, Stepper, labelCls } from "@/components/forms";
+import { DEFAULT_REPEAT, RepeatPicker, repeatReady, type RepeatValue } from "@/components/repeat-picker";
 import { Avatar, Btn, Chip, StatusBadge } from "@/components/kit";
 import { DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { t } from "@/lib/i18n";
 import { assignableDepartmentIds, canAssign, canDirect, canManageEvents, remindableUsers } from "@/lib/permissions";
 import { idx, isOverdue } from "@/lib/selectors";
 import { actions, useDb, useMe, useNow } from "@/lib/store";
-import { addDays, beirutToUtc, dateKey, fmtDuration, fmtKey, fmtKeyShort, fmtMonth, fmtTime, fromInputs, MIN, ms, timeInputValue } from "@/lib/time";
+import { addDays, beirutToUtc, dateKey, fmtDuration, fmtKey, fmtTime, fromInputs, MIN, ms, timeInputValue } from "@/lib/time";
 import {
   AREA_LABEL,
   EVENT_KIND_COLOR,
@@ -25,7 +26,6 @@ import {
   type EventStatus,
   type Priority,
   type RecurringTask,
-  type Repeat,
   type User,
   type VenueEvent,
 } from "@/lib/types";
@@ -36,7 +36,7 @@ import { eventTasks, fmtMoney } from "@/lib/venue";
 const KINDS: EventKind[] = ["birthday", "private", "school", "corporate", "tournament", "other"];
 const AREAS: Area[] = ["playground", "restaurant", "sports", "whole_venue", "other"];
 const STATUSES: EventStatus[] = ["booked", "confirmed", "done", "cancelled"];
-export const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+export { WEEKDAYS } from "@/components/repeat-picker";
 
 /** Department whose people usually handle an area. */
 const areaDept = (a: Area) => (a === "restaurant" ? "restaurant" : a === "playground" ? "playground" : "ops");
@@ -464,10 +464,9 @@ export function RecurringForm({ rule, onDone }: { rule: RecurringTask | null; on
   const [title, setTitle] = useState(rule?.title ?? "");
   const [description, setDescription] = useState(rule?.description ?? "");
   const [assignee, setAssignee] = useState(rule?.assigned_to ?? people[0]?.id ?? "");
-  const [repeat, setRepeat] = useState<Repeat>(rule?.repeat ?? "daily");
-  const [weekdays, setWeekdays] = useState<number[]>(rule?.weekdays ?? [1]);
-  const [monthDay, setMonthDay] = useState(rule?.month_day ?? 1);
-  const [dates, setDates] = useState<string[]>(rule?.dates ?? []);
+  const [rep, setRep] = useState<RepeatValue>(() =>
+    rule ? { repeat: rule.repeat, weekdays: rule.weekdays, month_day: rule.month_day, dates: rule.dates ?? [] } : DEFAULT_REPEAT,
+  );
   const [time, setTime] = useState(rule?.due_time ?? "10:00");
   const [est, setEst] = useState(rule?.estimated_duration ?? 30);
   const [priority, setPriority] = useState<Priority>(rule?.priority ?? "high");
@@ -492,10 +491,7 @@ export function RecurringForm({ rule, onDone }: { rule: RecurringTask | null; on
         department_id: dept,
         assigned_to: assignee,
         priority,
-        repeat,
-        weekdays,
-        month_day: monthDay,
-        dates,
+        ...rep,
         due_time: time,
         estimated_duration: est,
       },
@@ -530,30 +526,7 @@ export function RecurringForm({ rule, onDone }: { rule: RecurringTask | null; on
           </Field>
         )}
         <Field label={t("Repeats")}>
-          <div className="flex flex-wrap gap-1.5">
-            {(["daily", "weekly", "monthly", "custom"] as Repeat[]).map((r) => (
-              <Chip key={r} active={repeat === r} onClick={() => setRepeat(r)}>
-                {t({ daily: "Every day", weekly: "Every week", monthly: "Every month", custom: "Custom dates" }[r])}
-              </Chip>
-            ))}
-          </div>
-          {repeat === "weekly" && (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {WEEKDAYS.map((d, n) => (
-                <Chip key={d} active={weekdays.includes(n)} onClick={() => setWeekdays((w) => (w.includes(n) ? w.filter((x) => x !== n) : [...w, n]))}>
-                  {t(d)}
-                </Chip>
-              ))}
-            </div>
-          )}
-          {repeat === "monthly" && (
-            <label className="mt-2 flex items-center gap-2 text-sm text-paper/70">
-              {t("On day")}
-              <input type="number" min={1} max={28} className="field w-20 py-1.5 text-center" value={monthDay} onChange={(e) => setMonthDay(Number(e.target.value) || 1)} />
-              {t("of each month")}
-            </label>
-          )}
-          {repeat === "custom" && <MultiDatePicker value={dates} onChange={setDates} />}
+          <RepeatPicker value={rep} onChange={setRep} />
         </Field>
         <div className="grid grid-cols-2 gap-2">
           <Field label={t("Due at")}>
@@ -574,7 +547,7 @@ export function RecurringForm({ rule, onDone }: { rule: RecurringTask | null; on
       <Footer>
         <div className="ms-auto flex gap-2">
           <Btn onClick={onDone}>{t("Cancel")}</Btn>
-          <Btn variant="primary" type="submit" disabled={!assignee || !dept || (repeat === "custom" && dates.length === 0)}>
+          <Btn variant="primary" type="submit" disabled={!assignee || !dept || !repeatReady(rep)}>
             <RepeatIcon className="size-4" /> {rule ? t("Save") : t("Create schedule")}
           </Btn>
         </div>
@@ -584,80 +557,3 @@ export function RecurringForm({ rule, onDone }: { rule: RecurringTask | null; on
 }
 
 
-const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0]; // Monday first, like the calendar
-
-/** Tap days to pick any set of dates (today onwards) for a custom schedule. */
-function MultiDatePicker({ value, onChange }: { value: string[]; onChange: (dates: string[]) => void }) {
-  const now = useNow();
-  const today = dateKey(now);
-  const [month, setMonth] = useState((value.find((d) => d >= today) ?? today).slice(0, 7));
-  const first = `${month}-01`;
-  const lead = WEEK_ORDER.indexOf(new Date(`${first}T12:00:00Z`).getUTCDay());
-  const days = Array.from({ length: 42 }, (_, n) => addDays(first, n - lead));
-  const picked = new Set(value);
-  const shift = (n: number) => {
-    const [y, m] = month.split("-").map(Number);
-    const d = new Date(Date.UTC(y, m - 1 + n, 1));
-    setMonth(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`);
-  };
-  const toggle = (d: string) => onChange(picked.has(d) ? value.filter((x) => x !== d) : [...value, d].sort());
-  const upcoming = value.filter((d) => d >= today).sort();
-  return (
-    <div className="mt-2 rounded-2xl border border-white/10 p-3">
-      <div className="mb-2 flex items-center justify-between">
-        <Btn size="sm" variant="subtle" onClick={() => shift(-1)} disabled={month <= today.slice(0, 7)} aria-label={t("Previous month")}>
-          <ChevronLeft className="size-4 rtl:rotate-180" />
-        </Btn>
-        <p className="text-sm font-semibold">{fmtMonth(first)}</p>
-        <Btn size="sm" variant="subtle" onClick={() => shift(1)} aria-label={t("Next month")}>
-          <ChevronRight className="size-4 rtl:rotate-180" />
-        </Btn>
-      </div>
-      <div className="grid grid-cols-7 gap-1 text-center">
-        {WEEK_ORDER.map((d) => (
-          <span key={d} className="text-[10px] font-semibold tracking-wider text-paper/40 uppercase">
-            {t(WEEKDAYS[d])}
-          </span>
-        ))}
-        {days.map((d) => {
-          const out = d.slice(0, 7) !== month;
-          const past = d < today;
-          const on = picked.has(d);
-          return (
-            <button
-              key={d}
-              type="button"
-              disabled={past}
-              aria-pressed={on}
-              aria-label={fmtKey(d)}
-              onClick={() => toggle(d)}
-              className={cn(
-                "tnum grid h-9 place-items-center rounded-xl text-sm transition",
-                on ? "bg-brand font-bold text-ink" : "hover:bg-white/8",
-                out && !on && "text-paper/30",
-                past && "pointer-events-none opacity-25",
-                d === today && !on && "ring-1 ring-brand/50 ring-inset",
-              )}
-            >
-              {Number(d.slice(8, 10))}
-            </button>
-          );
-        })}
-      </div>
-      <div className="mt-3 flex flex-wrap items-center gap-1.5">
-        {upcoming.length === 0 ? (
-          <p className="text-xs text-paper/50">{t("Tap the days the task should happen.")}</p>
-        ) : (
-          <>
-            <span className="text-xs text-paper/55">{upcoming.length === 1 ? t("1 date") : t("{n} dates", { n: upcoming.length })}:</span>
-            {upcoming.map((d) => (
-              <Chip key={d} active onClick={() => toggle(d)} aria-label={t("Remove {date}", { date: fmtKey(d) })}>
-                {fmtKeyShort(d)} <X className="size-3" />
-              </Chip>
-            ))}
-          </>
-        )}
-      </div>
-    </div>
-  );
-}

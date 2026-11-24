@@ -6,6 +6,7 @@ import type { Priority } from "./types";
 export interface ComposerPreset {
   department_id?: string;
   assigned_to?: string;
+  recurring?: boolean; // open with "Repeat this task" ticked
 }
 
 /** Quick status filter on the task board. */
@@ -37,12 +38,10 @@ interface UiState {
   walkIn: boolean;
   composer: ComposerPreset | null;
   board: BoardFilters;
-  /** Tab the calendar opens on next (e.g. Recurring tasks, from the task board). */
-  calendarTab: "recurring" | null;
 }
 
 /** Transient interface state shared across screens (never persisted). */
-export const useUi = create<UiState>(() => ({ demoOpen: false, walkIn: false, composer: null, board: NO_FILTERS, calendarTab: null }));
+export const useUi = create<UiState>(() => ({ demoOpen: false, walkIn: false, composer: null, board: NO_FILTERS }));
 
 export const openDemo = () => useUi.setState({ demoOpen: true });
 export const closeDemo = () => useUi.setState({ demoOpen: false });

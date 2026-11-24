@@ -1,12 +1,13 @@
 "use client";
 
-import { AlarmClock, Check, ChevronDown, Rocket } from "lucide-react";
+import { AlarmClock, Check, ChevronDown, Repeat as RepeatIcon, Rocket } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useMemo, useState, type FormEvent } from "react";
 import { Avatar, Btn, Chip, EASE } from "@/components/kit";
+import { DEFAULT_REPEAT, describeRepeat, RepeatPicker, repeatReady, type RepeatValue } from "@/components/repeat-picker";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { t } from "@/lib/i18n";
-import { assignableDepartmentIds, assignableUsers } from "@/lib/permissions";
+import { assignableDepartmentIds, assignableUsers, canManageRecurring } from "@/lib/permissions";
 import { idx, queueFor } from "@/lib/selectors";
 import { actions, useDb, useMe } from "@/lib/store";
 import { TEMPLATES } from "@/lib/templates";
@@ -58,6 +59,9 @@ function ComposerForm({ preset }: { preset: ComposerPreset }) {
   const [notes, setNotes] = useState("");
   const [more, setMore] = useState(false);
   const [deployed, setDeployed] = useState<string | null>(null);
+  // Recurring: instead of one deadline, a schedule and a time of day.
+  const [recurring, setRecurring] = useState(!!preset.recurring && canManageRecurring(me));
+  const [repeat, setRepeat] = useState<RepeatValue>(DEFAULT_REPEAT);
 
   const people = useMemo(() => assignableUsers(db, me, dept), [db, me, dept]);
   const templates = TEMPLATES[dept] ?? [];
@@ -94,6 +98,22 @@ function ComposerForm({ preset }: { preset: ComposerPreset }) {
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
+    if (recurring) {
+      const saved = actions.saveRecurring({
+        title,
+        description,
+        department_id: dept,
+        assigned_to: assignee,
+        priority,
+        ...repeat,
+        due_time: due.time,
+        estimated_duration: allowed,
+      });
+      if (!saved) return;
+      setDeployed(i.userById.get(assignee)?.name ?? t("the team"));
+      setTimeout(closeComposer, 2200);
+      return;
+    }
     const ok = actions.createTask({
       title,
       description,
@@ -134,13 +154,19 @@ function ComposerForm({ preset }: { preset: ComposerPreset }) {
             <Rocket className="size-10" />
           </motion.div>
           <div>
-            <DialogTitle className="display text-3xl">{t("Task deployed")}</DialogTitle>
+            <DialogTitle className="display text-3xl">{recurring ? t("Recurring task created") : t("Task deployed")}</DialogTitle>
             <DialogDescription className="mt-1.5 text-sm text-paper/65">
-              {t("“{title}” is now in {name}’s queue, with {time} allowed.", {
-                title: title.trim(),
-                name: deployed,
-                time: fmtDuration(allowed * 60),
-              })}
+              {recurring
+                ? t("“{title}” goes into {name}’s queue by itself: {schedule}.", {
+                    title: title.trim(),
+                    name: deployed,
+                    schedule: describeRepeat({ ...repeat, due_time: due.time }),
+                  })
+                : t("“{title}” is now in {name}’s queue, with {time} allowed.", {
+                    title: title.trim(),
+                    name: deployed,
+                    time: fmtDuration(allowed * 60),
+                  })}
             </DialogDescription>
           </div>
         </div>
@@ -314,34 +340,68 @@ function ComposerForm({ preset }: { preset: ComposerPreset }) {
 
         <div>
           <span className={label}>{t("Due")}</span>
-          <div className="mb-2 flex flex-wrap gap-1.5">
-            {quickDue.map(([name, at]) => (
-              <Chip key={name} onClick={() => setDue(dueFrom(at()))}>
-                {name}
-              </Chip>
-            ))}
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <input
-              type="date"
-              className="field"
-              aria-label={t("Due date")}
-              value={due.date}
-              onChange={(e) => setDue((d) => ({ ...d, date: e.target.value }))}
-              required
-            />
-            <input
-              type="time"
-              className="field"
-              aria-label={t("Due time (Beirut)")}
-              value={due.time}
-              onChange={(e) => setDue((d) => ({ ...d, time: e.target.value }))}
-              required
-            />
-          </div>
+          {canManageRecurring(me) && (
+            <label
+              className={cn(
+                "mb-3 flex cursor-pointer items-center gap-3 rounded-2xl border p-3 transition",
+                recurring ? "border-brand/60 bg-brand/10" : "border-white/10 bg-white/[0.03] hover:border-white/25",
+              )}
+            >
+              <input type="checkbox" className="size-5 accent-[#22c73f]" checked={recurring} onChange={(e) => setRecurring(e.target.checked)} />
+              <RepeatIcon className={cn("size-4 shrink-0", recurring ? "text-brand" : "text-paper/50")} />
+              <span className="min-w-0 leading-tight">
+                <span className="block text-sm font-semibold">{t("Repeat this task")}</span>
+                <span className="block text-[11px] text-paper/50">{t("Every day, every week, every month, or on dates you pick.")}</span>
+              </span>
+            </label>
+          )}
+          {recurring ? (
+            <div className="space-y-3">
+              <RepeatPicker value={repeat} onChange={setRepeat} />
+              <label className="flex items-center gap-2 text-sm text-paper/70">
+                {t("Due at")}
+                <input
+                  type="time"
+                  className="field w-32"
+                  aria-label={t("Due time (Beirut)")}
+                  value={due.time}
+                  onChange={(e) => setDue((d) => ({ ...d, time: e.target.value }))}
+                  required
+                />
+              </label>
+            </div>
+          ) : (
+            <>
+              <div className="mb-2 flex flex-wrap gap-1.5">
+                {quickDue.map(([name, at]) => (
+                  <Chip key={name} onClick={() => setDue(dueFrom(at()))}>
+                    {name}
+                  </Chip>
+                ))}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="date"
+                  className="field"
+                  aria-label={t("Due date")}
+                  value={due.date}
+                  onChange={(e) => setDue((d) => ({ ...d, date: e.target.value }))}
+                  required
+                />
+                <input
+                  type="time"
+                  className="field"
+                  aria-label={t("Due time (Beirut)")}
+                  value={due.time}
+                  onChange={(e) => setDue((d) => ({ ...d, time: e.target.value }))}
+                  required
+                />
+              </div>
+            </>
+          )}
         </div>
 
-        <div>
+        <div className={cn(recurring && "hidden")}>
           <button
             type="button"
             onClick={() => setMore((m) => !m)}
@@ -385,11 +445,13 @@ function ComposerForm({ preset }: { preset: ComposerPreset }) {
         <p className="hidden text-xs text-paper/45 sm:block">
           {allowed ? `${t("{time} allowed", { time: fmtDuration(allowed * 60) })} · ` : ""}
           {t("{priority} priority", { priority: t(PRIORITY_LABEL[priority]) })}
+          {recurring ? ` · ${describeRepeat({ ...repeat, due_time: due.time })}` : ""}
         </p>
         <div className="ms-auto flex gap-2">
           <Btn onClick={closeComposer}>{t("Cancel")}</Btn>
-          <Btn variant="primary" type="submit">
-            <Rocket className="size-4" /> {t("Deploy task")}
+          <Btn variant="primary" type="submit" disabled={recurring && (!repeatReady(repeat) || !assignee)}>
+            {recurring ? <RepeatIcon className="size-4" /> : <Rocket className="size-4" />}
+            {recurring ? t("Create recurring task") : t("Deploy task")}
           </Btn>
         </div>
       </div>

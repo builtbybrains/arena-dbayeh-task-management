@@ -199,4 +199,14 @@ export const MM: Record<string, string> = {
     "للأعمال التي تتكرر يوميًا أو أسبوعيًا أو شهريًا، أو في تواريخ تختارها: فحص الافتتاح، التنظيف العميق، جرد المخزون.",
   "Pick at least one date.": "اختر تاريخًا واحدًا على الأقل.",
   "Pick fewer dates.": "اختر تواريخ أقل.",
+
+  // --- Recurring tasks from the task composer -------------------------------------------
+  "Repeat this task": "كرّر هذه المهمة",
+  "Every day, every week, every month, or on dates you pick.": "كل يوم، كل أسبوع، كل شهر، أو في تواريخ تختارها.",
+  "Create recurring task": "إنشاء مهمة متكررة",
+  "Recurring task created": "تم إنشاء المهمة المتكررة",
+  "“{title}” goes into {name}’s queue by itself: {schedule}.": "تُضاف «{title}» تلقائيًا إلى قائمة {name}: {schedule}.",
+  "Tasks that repeat": "مهام تتكرر",
+  "Each one goes into the person's queue by itself on its days. To add one, tick “Repeat this task” when deploying a task.":
+    "تُضاف كل واحدة تلقائيًا إلى قائمة الشخص في أيامها. لإضافة واحدة، فعّل «كرّر هذه المهمة» عند إرسال مهمة.",
 };

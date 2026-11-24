@@ -54,7 +54,7 @@ How it is built: `src/lib/business.ts` gives every screen a *view* of the data f
 - **Events**: birthday, private party, school trip, corporate, tournament. Each has a date and time, area, kids and adults, client contact, package price and deposit, and a person in charge. When booking, tick the prep / setup / cleanup tasks and who does them; they are assigned automatically with their deadlines. The person in charge and the Operations Manager get a reminder the day before and an hour before. Cancelling an event removes its reminders and unstarted prep tasks.
 - **Walk-ins**: the green **Walk-in** button on every screen. Enter kids and adults, the area and the amount paid (filled in from the entry prices), then save. The Walk-ins screen shows the day by hour, the log, and lets managers type in restaurant sales and other income.
 - **Reminders**: set for yourself or anyone below you. They pop up in the app at that time, stay in the bell until ticked off, and show as phone notifications if they were turned on (Account menu → Phone notifications; the app must be open in a tab).
-- **Recurring tasks** (Tasks → Recurring tasks, or Calendar → Recurring tasks): every day, every week (chosen days), every month (a day of the month) or **custom dates** picked on a calendar. Each one creates its task in the person's queue on the right day.
+- **Recurring tasks**: when deploying a task, tick **Repeat this task** and choose every day, every week (chosen days), every month (a day of the month) or **custom dates** picked on a calendar, plus the time it is due. Each one creates its task in the person's queue on the right day (never an already-late copy on the day it is made). **Tasks → Recurring tasks** lists every schedule to pause, edit or delete.
 - **Owners give each other work**: an owner can assign, pass on or schedule a task for another owner. Anyone who received a task sees "N tasks assigned to you" on the Command Center and an **Assigned to me** filter on the task board.
 - **Reports by date**: today, yesterday, this week, last 7 days, this month, last month or any range. Includes tasks per person, events, walk-ins (busiest day and hour, by area) and revenue (door + event packages + restaurant + other). Export to CSV or print / PDF. The original task reports and the daily submission chain (manager → Operations Manager → Owner) are under **Task reports**.
 
@@ -64,7 +64,7 @@ How it is built: `src/lib/business.ts` gives every screen a *view* of the data f
 2. **Team → People and PINs → Add person**: the Operations Manager, the Restaurant Manager, the Playground Manager, then the staff. Give each one a PIN.
 3. Everyone opens the same link on their phone, taps their name and types their PIN. The phone stays signed in.
 4. **Walk-ins → Entry prices**: set the price per kid / adult.
-5. **Calendar → Recurring tasks**: add the daily opening and closing checklists.
+5. **Deploy task → Repeat this task**: add the daily opening and closing checklists.
 
 ## How data is shared without a backend
 
