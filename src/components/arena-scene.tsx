@@ -6,6 +6,7 @@
 
 import dynamic from "next/dynamic";
 import { Component, useEffect, useState, type ReactNode } from "react";
+import { t } from "@/lib/i18n";
 import { HEALTH_COLOR, healthOf, type DepartmentNode } from "@/lib/selectors";
 import { useApp } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -15,7 +16,7 @@ function SceneLoading() {
     <div className="grid h-full place-items-center" role="status">
       <div className="flex flex-col items-center gap-3">
         <span className="size-10 animate-spin rounded-full border-2 border-brand/25 border-t-brand" />
-        <p className="eyebrow">Loading operations map</p>
+        <p className="eyebrow">{t("Loading operations map")}</p>
       </div>
     </div>
   );
@@ -103,7 +104,13 @@ function FlatMap({
             type="button"
             onClick={() => onSelect(node.id)}
             aria-pressed={on}
-            aria-label={`${node.name}: ${Math.round(node.completion)}% complete, ${node.assigned} tasks today, ${node.active} working, ${node.overdue} overdue`}
+            aria-label={t("{name}: {pct}% complete, {assigned} tasks today, {active} working, {overdue} overdue", {
+              name: t(node.name),
+              pct: Math.round(node.completion),
+              assigned: node.assigned,
+              active: node.active,
+              overdue: node.overdue,
+            })}
             className={cn(
               "absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0.5 rounded-2xl border px-2.5 py-1.5 backdrop-blur-md transition",
               on ? "border-white/70 bg-white/15" : "border-white/12 bg-black/55 hover:border-white/40",
@@ -116,7 +123,7 @@ function FlatMap({
             </span>
             <span className="tnum text-[11px] text-paper/70">
               {Math.round(node.completion)}% · {node.completed}/{node.assigned}
-              {node.overdue > 0 && <span className="ml-1 font-semibold text-crit">· {node.overdue} late</span>}
+              {node.overdue > 0 && <span className="ms-1 font-semibold text-crit">· {t("{n} late", { n: node.overdue })}</span>}
             </span>
           </button>
         );

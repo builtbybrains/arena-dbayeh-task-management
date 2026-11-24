@@ -8,6 +8,7 @@ import { Line } from "@react-three/drei";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import * as THREE from "three";
+import { t } from "@/lib/i18n";
 import { HEALTH_COLOR, healthOf, type DepartmentNode } from "@/lib/selectors";
 
 const RX = 4.4;
@@ -324,7 +325,13 @@ export default function ArenaCanvas({
                 }}
                 onClick={() => onSelect?.(node.id)}
                 aria-pressed={on}
-                aria-label={`${node.name}: ${Math.round(node.completion)}% complete, ${node.assigned} tasks today, ${node.active} working, ${node.overdue} overdue`}
+                aria-label={t("{name}: {pct}% complete, {assigned} tasks today, {active} working, {overdue} overdue", {
+                  name: t(node.name),
+                  pct: Math.round(node.completion),
+                  assigned: node.assigned,
+                  active: node.active,
+                  overdue: node.overdue,
+                })}
                 className={`pointer-events-auto absolute top-0 left-0 flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold tracking-wider whitespace-nowrap uppercase opacity-0 backdrop-blur-md transition-colors ${
                   on ? "border-white/70 bg-white/20 text-white" : "border-white/15 bg-black/55 text-white/85 hover:border-white/50"
                 }`}

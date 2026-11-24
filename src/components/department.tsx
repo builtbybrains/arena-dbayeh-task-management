@@ -8,6 +8,7 @@ import { ActivityFeed, AttentionPanel } from "@/components/activity";
 import { Avatar, Btn, EASE, Empty, Panel, PriorityBadge, Ring, StatusBadge } from "@/components/kit";
 import { TaskCard, TrackedTime } from "@/components/task-card";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { isAr, t } from "@/lib/i18n";
 import { assignableDepartmentIds, canAssign, canViewDepartment, canViewUser } from "@/lib/permissions";
 import {
   boardTasks,
@@ -62,32 +63,32 @@ export function EmployeeCard({ user }: { user: User }) {
         <div className="min-w-0 flex-1 leading-tight">
           <p className="truncate font-semibold">{user.name}</p>
           <p className="truncate text-xs text-paper/55">
-            {user.title}
-            {outlet ? ` · ${outlet.name}` : ""}
+            {t(user.title)}
+            {outlet ? ` · ${t(outlet.name)}` : ""}
           </p>
         </div>
         <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-wider uppercase", STATUS_CHIP[today.status])}>
-          {STATUS_TEXT[today.status]}
+          {t(STATUS_TEXT[today.status])}
         </span>
       </div>
 
       <div className="mt-3 rounded-xl border border-white/8 bg-white/[0.025] p-3">
-        <p className="text-[10px] font-semibold tracking-[0.16em] text-paper/45 uppercase">Current task</p>
+        <p className="text-[10px] font-semibold tracking-[0.16em] text-paper/45 uppercase">{t("Current task")}</p>
         {focus ? (
           <div className="mt-1 flex items-center justify-between gap-3">
             <p className="min-w-0 truncate text-sm font-medium">{focus.title}</p>
             <TrackedTime task={focus} className={cn("shrink-0 text-sm", working ? "text-brand" : "text-warn")} />
           </div>
         ) : (
-          <p className="mt-1 text-sm text-paper/50">Nothing in progress</p>
+          <p className="mt-1 text-sm text-paper/50">{t("Nothing in progress")}</p>
         )}
       </div>
 
       <dl className="mt-3 grid grid-cols-3 gap-2 text-center">
         {[
-          ["Time today", fmtDuration(today.tracked_seconds)],
-          ["Done today", String(today.completed_today)],
-          ["Remaining", String(today.remaining)],
+          [t("Time today"), fmtDuration(today.tracked_seconds)],
+          [t("Done today"), String(today.completed_today)],
+          [t("Remaining"), String(today.remaining)],
         ].map(([k, v]) => (
           <div key={k} className="rounded-xl bg-white/[0.03] py-2">
             <dd className="tnum font-display text-xl font-bold italic">{v}</dd>
@@ -97,23 +98,23 @@ export function EmployeeCard({ user }: { user: User }) {
       </dl>
       {today.overdue > 0 && (
         <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-crit">
-          <TriangleAlert className="size-3.5" /> {today.overdue} overdue
+          <TriangleAlert className="size-3.5" /> {t("{n} overdue", { n: today.overdue })}
         </p>
       )}
 
       <div className="no-print mt-3 flex flex-wrap items-center gap-2">
         {mayAssign && (
           <Btn size="sm" variant="primary" onClick={() => openComposer({ department_id: user.department_id!, assigned_to: user.id })}>
-            <Plus className="size-3.5" /> Assign task
+            <Plus className="size-3.5" /> {t("Assign task")}
           </Btn>
         )}
         {sample && (
-          <Btn size="sm" onClick={() => switchProfile(user.id)} title="Demo shortcut: open this person's own screen">
-            <Eye className="size-3.5" /> See their screen
+          <Btn size="sm" onClick={() => switchProfile(user.id)} title={t("Demo shortcut: open this person's own screen")}>
+            <Eye className="size-3.5" /> {t("See their screen")}
           </Btn>
         )}
-        <Btn size="sm" variant="subtle" className="ml-auto" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-          Queue <ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} />
+        <Btn size="sm" variant="subtle" className="ms-auto" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+          {t("Queue")} <ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} />
         </Btn>
       </div>
 
@@ -125,7 +126,7 @@ export function EmployeeCard({ user }: { user: User }) {
             exit={{ height: 0, opacity: 0 }}
             className="overflow-hidden"
           >
-            {queue.length === 0 && <li className="pt-3 text-xs text-paper/50">No open tasks.</li>}
+            {queue.length === 0 && <li className="pt-3 text-xs text-paper/50">{t("No open tasks.")}</li>}
             {queue.map((t, n) => (
               <li key={t.id} className={cn("flex items-center gap-2 py-2 text-sm", n === 0 ? "mt-3 border-t border-white/8 pt-3" : "border-t border-white/5")}>
                 <span className="tnum w-4 shrink-0 text-xs text-paper/35">{n + 1}</span>
@@ -157,7 +158,7 @@ export function DepartmentView({ deptId, wide }: { deptId: string; wide?: boolea
   const scope = useMemo(() => [deptId], [deptId]);
 
   if (!dept || !node || !canViewDepartment(me, deptId)) {
-    return <Empty title="No access" hint="Your role cannot open this department." />;
+    return <Empty title={t("No access")} hint={t("Your role cannot open this department.")} />;
   }
   const manager = idx(db).userById.get(dept.manager_id ?? "");
   const people = db.users.filter((u) => u.department_id === deptId && u.active_status && u.role === "employee");
@@ -170,13 +171,15 @@ export function DepartmentView({ deptId, wide }: { deptId: string; wide?: boolea
   const idsFor = (p: string) => open.filter((t) => t.priority === p).map((t) => t.id);
 
   const tiles: [string, string, string?][] = [
-    ["Employees", String(node.employees)],
-    ["Active now", String(node.active), "text-brand"],
-    ["Assigned today", String(node.assigned)],
-    ["Completed", String(node.completed), "text-brand-soft"],
-    ["Pending", String(node.pending)],
-    ["Overdue", String(node.overdue), node.overdue ? "text-crit" : undefined],
+    [t("Employees"), String(node.employees)],
+    [t("Active now"), String(node.active), "text-brand"],
+    [t("Assigned today"), String(node.assigned)],
+    [t("Completed"), String(node.completed), "text-brand-soft"],
+    [t("Pending"), String(node.pending)],
+    [t("Overdue"), String(node.overdue), node.overdue ? "text-crit" : undefined],
   ];
+  // "Managed by {name}." with the name in bold, in whichever order the language needs.
+  const [managedBefore, managedAfter = ""] = t("Managed by {name}.").split("{name}");
 
   return (
     <div className="space-y-5">
@@ -185,15 +188,18 @@ export function DepartmentView({ deptId, wide }: { deptId: string; wide?: boolea
           <span className="tnum font-display text-xl font-bold italic">{Math.round(node.completion)}%</span>
         </Ring>
         <div className="min-w-0 flex-1">
-          <p className="eyebrow">Department</p>
-          <h2 className="display mt-1 text-3xl md:text-4xl">{dept.name}</h2>
+          <p className="eyebrow">{t("Department")}</p>
+          <h2 className="display mt-1 text-3xl md:text-4xl">{t(dept.name)}</h2>
           <p className="mt-1.5 text-sm text-paper/55">
-            {dept.description} Managed by <span className="font-semibold text-paper/85">{manager?.name}</span>.
+            {dept.description ? `${t(dept.description)} ` : ""}
+            {managedBefore}
+            <span className="font-semibold text-paper/85">{manager?.name}</span>
+            {managedAfter}
           </p>
         </div>
         {mayAssign && (
           <Btn variant="primary" size="lg" className="no-print" onClick={() => openComposer({ department_id: deptId })}>
-            <Plus className="size-5" /> Assign Task
+            <Plus className="size-5" /> {t("Assign Task")}
           </Btn>
         )}
       </div>
@@ -207,8 +213,10 @@ export function DepartmentView({ deptId, wide }: { deptId: string; wide?: boolea
         ))}
       </dl>
       <p className="text-xs text-paper/45">
-        Completion rate {Math.round(node.completion)}% of tasks due today · {fmtDuration(node.tracked_seconds)} active
-        task time today.
+        {t("Completion rate {pct}% of tasks due today · {time} active task time today.", {
+          pct: Math.round(node.completion),
+          time: fmtDuration(node.tracked_seconds),
+        })}
       </p>
 
       <div className={cn("grid gap-5", wide && "xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]")}>
@@ -217,7 +225,7 @@ export function DepartmentView({ deptId, wide }: { deptId: string; wide?: boolea
             <RestaurantPanel key={r.id} restaurant={r} wide={wide} />
           ))}
           {unplaced.length > 0 && (
-            <Panel title={outlets.length ? "Other team members" : "Team"} icon={<Users className="size-5" />}>
+            <Panel title={outlets.length ? t("Other team members") : t("Team")} icon={<Users className="size-5" />}>
               <div className={cn("grid gap-3", wide && "md:grid-cols-2")}>
                 {unplaced.map((u) => (
                   <EmployeeCard key={u.id} user={u} />
@@ -225,9 +233,9 @@ export function DepartmentView({ deptId, wide }: { deptId: string; wide?: boolea
               </div>
             </Panel>
           )}
-          <Panel title={`Open tasks · ${open.length}`}>
+          <Panel title={t("Open tasks · {n}", { n: open.length })}>
             {open.length === 0 ? (
-              <Empty title="Queue is clear" hint="Every task for this department is completed." />
+              <Empty title={t("Queue is clear")} hint={t("Every task for this department is completed.")} />
             ) : (
               <div className={cn("grid items-start gap-3", wide && "md:grid-cols-2")}>
                 {open.map((t) => (
@@ -237,7 +245,7 @@ export function DepartmentView({ deptId, wide }: { deptId: string; wide?: boolea
             )}
           </Panel>
           {done.length > 0 && (
-            <Panel title={`Completed today · ${done.length}`}>
+            <Panel title={t("Completed today · {n}", { n: done.length })}>
               <div className={cn("grid items-start gap-3", wide && "md:grid-cols-2")}>
                 {done.map((t) => (
                   <TaskCard key={t.id} task={t} />
@@ -247,10 +255,10 @@ export function DepartmentView({ deptId, wide }: { deptId: string; wide?: boolea
           )}
         </div>
         <div className="space-y-5">
-          <Panel title="Needs attention" icon={<TriangleAlert className="size-5" />}>
+          <Panel title={t("Needs attention")} icon={<TriangleAlert className="size-5" />}>
             <AttentionPanel deptIds={scope} />
           </Panel>
-          <Panel title="Department activity">
+          <Panel title={t("Department activity")}>
             <ActivityFeed limit={10} deptId={deptId} />
           </Panel>
         </div>
@@ -266,23 +274,23 @@ export function RestaurantPanel({ restaurant, wide }: { restaurant: Restaurant; 
   const router = useRouter();
   const s = useMemo(() => restaurantSummary(db, restaurant.id, now), [db, restaurant.id, now]);
   const tiles: [string, number, string?][] = [
-    ["Waiters", s.waiters.length],
-    ["Working now", s.working, "text-brand"],
-    ["Open tasks", s.open],
-    ["Overdue", s.overdue, s.overdue ? "text-crit" : undefined],
-    ["Over time allowed", s.over_time, s.over_time ? "text-warn" : undefined],
-    ["Done today", s.completed_today, "text-brand-soft"],
+    [t("Waiters"), s.waiters.length],
+    [t("Working now"), s.working, "text-brand"],
+    [t("Open tasks"), s.open],
+    [t("Overdue"), s.overdue, s.overdue ? "text-crit" : undefined],
+    [t("Over time allowed"), s.over_time, s.over_time ? "text-warn" : undefined],
+    [t("Done today"), s.completed_today, "text-brand-soft"],
   ];
   return (
-    <section className="glass rounded-3xl p-4 md:p-5" aria-label={restaurant.name}>
+    <section className="glass rounded-3xl p-4 md:p-5" aria-label={t(restaurant.name)}>
       <div className="flex flex-wrap items-center gap-4">
         <Ring value={s.completion / 100} size={68} stroke={7} color={HEALTH_COLOR[healthOf(s)]}>
           <span className="tnum font-display text-base font-bold italic">{Math.round(s.completion)}%</span>
         </Ring>
         <div className="min-w-0 flex-1">
-          <p className="eyebrow">Restaurant</p>
-          <h3 className="display mt-1 text-2xl md:text-3xl">{restaurant.name}</h3>
-          <p className="mt-1 text-sm text-paper/55">{restaurant.description}</p>
+          <p className="eyebrow">{t("Restaurant")}</p>
+          <h3 className="display mt-1 text-2xl md:text-3xl">{t(restaurant.name)}</h3>
+          <p className="mt-1 text-sm text-paper/55">{restaurant.description ? t(restaurant.description) : ""}</p>
         </div>
         <Btn
           size="sm"
@@ -292,7 +300,7 @@ export function RestaurantPanel({ restaurant, wide }: { restaurant: Restaurant; 
             router.push("/tasks");
           }}
         >
-          <ListFilter className="size-4" /> Its tasks
+          <ListFilter className="size-4" /> {t("Its tasks")}
         </Btn>
       </div>
 
@@ -306,7 +314,7 @@ export function RestaurantPanel({ restaurant, wide }: { restaurant: Restaurant; 
       </dl>
 
       <h4 className="mt-5 mb-3 flex items-center gap-2 font-display text-base font-bold tracking-wide uppercase">
-        <Users className="size-4 text-brand" /> Waiters
+        <Users className="size-4 text-brand" /> {t("Waiters")}
       </h4>
       <div className={cn("grid items-start gap-3", wide && "md:grid-cols-2")}>
         {s.waiters.map((u) => (
@@ -322,10 +330,10 @@ export function DepartmentSheet({ deptId, onClose }: { deptId: string | null; on
   return (
     <Sheet open={deptId !== null} onOpenChange={(o) => !o && onClose()}>
       <SheetContent
-        side="right"
-        className="glass-solid gap-0 overflow-y-auto border-l border-white/10 p-5 pt-12 data-[side=right]:w-full data-[side=right]:sm:max-w-2xl"
+        side={isAr() ? "left" : "right"}
+        className="glass-solid gap-0 overflow-y-auto border-s border-white/10 p-5 pt-12 data-[side=left]:w-full data-[side=left]:sm:max-w-2xl data-[side=right]:w-full data-[side=right]:sm:max-w-2xl"
       >
-        <SheetTitle className="sr-only">Department details</SheetTitle>
+        <SheetTitle className="sr-only">{t("Department details")}</SheetTitle>
         {deptId && <DepartmentView deptId={deptId} />}
       </SheetContent>
     </Sheet>

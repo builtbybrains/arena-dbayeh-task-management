@@ -21,6 +21,7 @@ import {
 import { AnimatePresence, motion } from "motion/react";
 import { useMemo, useState } from "react";
 import { Btn, EASE, Empty } from "@/components/kit";
+import { isAr, t } from "@/lib/i18n";
 import { attentionItems, feed, type AttentionItem, type FeedEntry } from "@/lib/selectors";
 import { useDb, useMe, useNow } from "@/lib/store";
 import { fmtAgo } from "@/lib/time";
@@ -56,7 +57,7 @@ export function ActivityFeed({ limit = 14, deptId }: { limit?: number; deptId?: 
   const now = useNow();
   const entries = useMemo(() => feed(db, me, limit, deptId), [db, me, limit, deptId]);
 
-  if (entries.length === 0) return <Empty icon={<Activity className="size-6" />} title="No activity yet" />;
+  if (entries.length === 0) return <Empty icon={<Activity className="size-6" />} title={t("No activity yet")} />;
   return (
     <ul className="space-y-1">
       <AnimatePresence initial={false}>
@@ -66,7 +67,7 @@ export function ActivityFeed({ limit = 14, deptId }: { limit?: number; deptId?: 
             <motion.li
               key={e.log.id}
               layout
-              initial={{ opacity: 0, x: -18, height: 0 }}
+              initial={{ opacity: 0, x: isAr() ? 18 : -18, height: 0 }}
               animate={{ opacity: 1, x: 0, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
               transition={{ duration: 0.4, ease: EASE }}
@@ -129,8 +130,8 @@ export function AttentionList({
     return (
       <Empty
         icon={<CircleCheck className="size-6" />}
-        title="All clear"
-        hint="Nothing is over its time allowed, overdue or waiting on you."
+        title={t("All clear")}
+        hint={t("Nothing is over its time allowed, overdue or waiting on you.")}
       />
     );
   }
@@ -155,7 +156,7 @@ export function AttentionList({
               </span>
               <span className="min-w-0 flex-1">
                 <span className={cn("block text-[10px] font-bold tracking-[0.16em] uppercase", tone)}>
-                  {KIND_LABEL[item.kind]}
+                  {t(KIND_LABEL[item.kind])}
                 </span>
                 <span className="block truncate text-sm font-semibold">{item.title}</span>
                 <span className="block text-xs leading-snug text-paper/60">{item.detail}</span>
@@ -168,10 +169,10 @@ export function AttentionList({
                 <button
                   type="button"
                   onClick={() => onItem(item)}
-                  className="flex w-full items-start gap-3 rounded-2xl border border-white/8 bg-white/[0.025] p-3 text-left transition hover:border-white/25"
+                  className="flex w-full items-start gap-3 rounded-2xl border border-white/8 bg-white/[0.025] p-3 text-start transition hover:border-white/25"
                 >
                   {body}
-                  <ChevronRight className="mt-2 size-4 shrink-0 text-paper/35" />
+                  <ChevronRight className="mt-2 size-4 shrink-0 text-paper/35 rtl:rotate-180" />
                 </button>
               ) : (
                 <div className="flex items-start gap-3 rounded-2xl border border-white/8 bg-white/[0.025] p-3">{body}</div>
@@ -182,7 +183,7 @@ export function AttentionList({
       </ul>
       {items.length > limit && (
         <Btn size="sm" variant="subtle" className="mt-2" onClick={() => setAll((a) => !a)}>
-          {all ? "Show fewer" : `Show all ${items.length}`}
+          {all ? t("Show fewer") : t("Show all {n}", { n: items.length })}
         </Btn>
       )}
     </div>

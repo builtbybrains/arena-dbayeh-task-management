@@ -86,7 +86,7 @@ export default function TeamPage() {
       ) : (
         <>
 
-      <div className="no-print mb-3 flex gap-1.5 overflow-x-auto pb-1" role="group" aria-label="Filter by status">
+      <div className="no-print mb-3 flex gap-1.5 overflow-x-auto pb-1" role="group" aria-label={t("Filter by status")}>
         {STATUSES.map(([s, label]) => (
           <Chip
             key={s}
@@ -94,7 +94,7 @@ export default function TeamPage() {
             onClick={() => setStatus(s)}
             className={cn(status !== s && s === "overdue" && counts.overdue > 0 && "border-crit/40 text-crit")}
           >
-            {label}
+            {t(label)}
             <span className={cn("tnum rounded-full px-1.5 text-[10px]", status === s ? "bg-brand/25" : "bg-white/10")}>
               {counts[s]}
             </span>
@@ -105,14 +105,14 @@ export default function TeamPage() {
         {wide && (
           <select
             className="field h-10 w-auto min-w-[170px] flex-1 py-0 sm:flex-none"
-            aria-label="Filter by department"
+            aria-label={t("Filter by department")}
             value={dept}
             onChange={(e) => setDept(e.target.value)}
           >
-            <option value="">All departments</option>
+            <option value="">{t("All departments")}</option>
             {db.departments.map((d) => (
               <option key={d.id} value={d.id}>
-                {d.name}
+                {t(d.name)}
               </option>
             ))}
           </select>
@@ -122,19 +122,19 @@ export default function TeamPage() {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search by name or role"
-            aria-label="Search people"
+            placeholder={t("Search by name or role")}
+            aria-label={t("Search people")}
             className="w-full bg-transparent text-sm outline-none placeholder:text-paper/40"
           />
         </label>
-        <p className="tnum ml-auto text-xs text-paper/50" aria-live="polite">
-          {shown.length} {shown.length === 1 ? "person" : "people"}
+        <p className="tnum ms-auto text-xs text-paper/50" aria-live="polite">
+          {t(shown.length === 1 ? "{n} person" : "{n} people", { n: shown.length })}
         </p>
       </div>
 
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
         {shown.length === 0 ? (
-          <Empty title="No one matches" hint="Try another status or clear the search." />
+          <Empty title={t("No one matches")} hint={t("Try another status or clear the search.")} />
         ) : (
           <div className="grid items-start gap-3 md:grid-cols-2">
             {shown.map((r) => (
@@ -143,12 +143,12 @@ export default function TeamPage() {
           </div>
         )}
         <Panel
-          title="Live activity"
+          title={t("Live activity")}
           icon={<Activity className="size-5" />}
           className="xl:sticky xl:top-20"
           right={
             <span className="flex items-center gap-2 text-[11px] font-semibold tracking-wider text-brand uppercase">
-              <span className="live-dot size-1.5 rounded-full bg-brand" /> Live
+              <span className="live-dot size-1.5 rounded-full bg-brand" /> {t("Live")}
             </span>
           }
         >

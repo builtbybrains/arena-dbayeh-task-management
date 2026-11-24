@@ -5,6 +5,7 @@ import { motion } from "motion/react";
 import { useMemo, useState } from "react";
 import { DepartmentSheet } from "@/components/department";
 import { Avatar, EASE, PageHeader, Ring } from "@/components/kit";
+import { t } from "@/lib/i18n";
 import { departmentNodes, HEALTH_COLOR, healthOf, idx } from "@/lib/selectors";
 import { useDb, useNow } from "@/lib/store";
 
@@ -18,9 +19,9 @@ export default function DepartmentsPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Departments"
-        title="One venue, every team"
-        sub="Today's progress in each department. Open one to see its people, queue and activity."
+        eyebrow={t("Departments")}
+        title={t("One venue, every team")}
+        sub={t("Today's progress in each department. Open one to see its people, queue and activity.")}
       />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {nodes.map((n, k) => {
@@ -37,28 +38,28 @@ export default function DepartmentsPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.45, delay: k * 0.04, ease: EASE }}
               whileHover={{ y: -4 }}
-              className="glass rounded-3xl p-5 text-left"
+              className="glass rounded-3xl p-5 text-start"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="eyebrow">{n.short}</p>
-                  <h2 className="display mt-1.5 text-2xl">{n.name}</h2>
+                  <h2 className="display mt-1.5 text-2xl">{t(n.name)}</h2>
                 </div>
                 <Ring value={n.completion / 100} size={64} stroke={6} color={HEALTH_COLOR[healthOf(n)]}>
                   <span className="tnum font-display text-base font-bold italic">{Math.round(n.completion)}%</span>
                 </Ring>
               </div>
-              <p className="mt-2 line-clamp-2 text-xs text-paper/55">{d.description}</p>
+              <p className="mt-2 line-clamp-2 text-xs text-paper/55">{d.description ? t(d.description) : ""}</p>
               {outlets.length > 0 && (
                 <p className="mt-1.5 text-xs font-semibold text-brand-soft">
-                  {outlets.map((r) => r.name).join(" · ")} · {waiters} waiters
+                  {outlets.map((r) => t(r.name)).join(" · ")} · {t("{n} waiters", { n: waiters })}
                 </p>
               )}
               <dl className="mt-4 grid grid-cols-3 gap-2 text-center">
                 {[
-                  ["Assigned", n.assigned],
-                  ["Done", n.completed],
-                  ["Pending", n.pending],
+                  [t("Assigned"), n.assigned],
+                  [t("Done"), n.completed],
+                  [t("Pending"), n.pending],
                 ].map(([label, v]) => (
                   <div key={label} className="rounded-xl bg-white/[0.035] py-2">
                     <dd className="tnum font-display text-xl font-bold italic">{v}</dd>

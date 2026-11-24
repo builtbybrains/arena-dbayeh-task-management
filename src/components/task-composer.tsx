@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useMemo, useState, type FormEvent } from "react";
 import { Avatar, Btn, Chip, EASE } from "@/components/kit";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { t } from "@/lib/i18n";
 import { assignableDepartmentIds, assignableUsers } from "@/lib/permissions";
 import { idx, queueFor } from "@/lib/selectors";
 import { actions, useDb, useMe } from "@/lib/store";
@@ -29,8 +30,8 @@ export function TaskComposer() {
 const label = "mb-1.5 block text-[11px] font-semibold tracking-[0.14em] text-paper/50 uppercase";
 const TIME_CHOICES = [10, 15, 30, 45, 60, 90];
 
-function dueFrom(t: number) {
-  return { date: dateKey(t), time: timeInputValue(t) };
+function dueFrom(at: number) {
+  return { date: dateKey(at), time: timeInputValue(at) };
 }
 
 function ComposerForm({ preset }: { preset: ComposerPreset }) {
@@ -50,8 +51,8 @@ function ComposerForm({ preset }: { preset: ComposerPreset }) {
   const [due, setDue] = useState(() => {
     const now = Date.now();
     // Two hours from now, rounded to the half hour, kept inside today.
-    const t = Math.ceil((now + 120 * MIN) / (30 * MIN)) * 30 * MIN;
-    return dueFrom(Math.min(t, beirutToUtc(dateKey(now), 23, 30)));
+    const at = Math.ceil((now + 120 * MIN) / (30 * MIN)) * 30 * MIN;
+    return dueFrom(Math.min(at, beirutToUtc(dateKey(now), 23, 30)));
   });
   const [category, setCategory] = useState("");
   const [notes, setNotes] = useState("");
@@ -68,14 +69,14 @@ function ComposerForm({ preset }: { preset: ComposerPreset }) {
     const managers = people.filter((u) => u.department_id && u.role === "manager");
     const staff = people.filter((u) => u.role === "employee");
     const outlets = db.restaurants.filter((r) => r.department_id === dept);
-    if (leadership.length) out.push({ label: "Leadership", users: leadership });
-    if (managers.length) out.push({ label: "Department manager", users: managers });
+    if (leadership.length) out.push({ label: t("Leadership"), users: leadership });
+    if (managers.length) out.push({ label: t("Department manager"), users: managers });
     for (const r of outlets) {
       const waiters = staff.filter((u) => u.restaurant_id === r.id);
-      if (waiters.length) out.push({ label: r.name, users: waiters });
+      if (waiters.length) out.push({ label: t(r.name), users: waiters });
     }
     const rest = staff.filter((u) => !outlets.some((r) => r.id === u.restaurant_id));
-    if (rest.length) out.push({ label: "Team", users: rest });
+    if (rest.length) out.push({ label: t("Team"), users: rest });
     return out;
   }, [people, db.restaurants, dept]);
 
@@ -85,10 +86,10 @@ function ComposerForm({ preset }: { preset: ComposerPreset }) {
   };
 
   const quickDue: [string, () => number][] = [
-    ["In 1 hour", () => Date.now() + 60 * MIN],
-    ["In 3 hours", () => Date.now() + 180 * MIN],
-    ["End of day", () => beirutToUtc(dateKey(Date.now()), 23, 0)],
-    ["Tomorrow 10:00", () => beirutToUtc(addDays(dateKey(Date.now()), 1), 10, 0)],
+    [t("In 1 hour"), () => Date.now() + 60 * MIN],
+    [t("In 3 hours"), () => Date.now() + 180 * MIN],
+    [t("End of day"), () => beirutToUtc(dateKey(Date.now()), 23, 0)],
+    [t("Tomorrow 10:00"), () => beirutToUtc(addDays(dateKey(Date.now()), 1), 10, 0)],
   ];
 
   const submit = (e: FormEvent) => {
@@ -105,7 +106,7 @@ function ComposerForm({ preset }: { preset: ComposerPreset }) {
       internal_notes: notes,
     });
     if (!ok) return;
-    setDeployed(i.userById.get(assignee)?.name ?? "the team");
+    setDeployed(i.userById.get(assignee)?.name ?? t("the team"));
     setTimeout(closeComposer, 1600);
   };
 
@@ -133,9 +134,13 @@ function ComposerForm({ preset }: { preset: ComposerPreset }) {
             <Rocket className="size-10" />
           </motion.div>
           <div>
-            <DialogTitle className="display text-3xl">Task deployed</DialogTitle>
+            <DialogTitle className="display text-3xl">{t("Task deployed")}</DialogTitle>
             <DialogDescription className="mt-1.5 text-sm text-paper/65">
-              “{title.trim()}” is now in {deployed}&rsquo;s queue, with {fmtDuration(allowed * 60)} allowed.
+              {t("“{title}” is now in {name}’s queue, with {time} allowed.", {
+                title: title.trim(),
+                name: deployed,
+                time: fmtDuration(allowed * 60),
+              })}
             </DialogDescription>
           </div>
         </div>
@@ -146,22 +151,23 @@ function ComposerForm({ preset }: { preset: ComposerPreset }) {
   return (
     <form onSubmit={submit} className="relative">
       <div className="p-5 pb-0">
-        <p className="eyebrow">Task deployment</p>
-        <DialogTitle className="display mt-1 text-3xl">Deploy a task</DialogTitle>
+        <p className="eyebrow">{t("Task deployment")}</p>
+        <DialogTitle className="display mt-1 text-3xl">{t("Deploy a task")}</DialogTitle>
         <DialogDescription className="mt-1.5 text-paper/55">
-          Pick a template or write your own, choose who does it, then set the priority, the time allowed and the
-          deadline.
+          {t(
+            "Pick a template or write your own, choose who does it, then set the priority, the time allowed and the deadline.",
+          )}
         </DialogDescription>
       </div>
 
       <div className="space-y-5 p-5">
         {depts.length > 1 && (
           <div>
-            <span className={label}>Department</span>
+            <span className={label}>{t("Department")}</span>
             <div className="flex flex-wrap gap-1.5">
               {depts.map((d) => (
                 <Chip key={d.id} active={d.id === dept} onClick={() => pickDept(d.id)}>
-                  {d.name}
+                  {t(d.name)}
                 </Chip>
               ))}
             </div>
@@ -170,47 +176,47 @@ function ComposerForm({ preset }: { preset: ComposerPreset }) {
 
         <div>
           <label className={label} htmlFor="task-title">
-            Task
+            {t("Task")}
           </label>
           <input
             id="task-title"
             className="field text-base font-semibold"
-            placeholder="What needs to be done?"
+            placeholder={t("What needs to be done?")}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             autoComplete="off"
           />
           {templates.length > 0 && (
             <div className="mt-2 flex gap-1.5 overflow-x-auto pb-1">
-              {templates.map((t) => (
+              {templates.map((tpl) => (
                 <Chip
-                  key={t.title}
-                  active={t.title === title}
+                  key={tpl.title}
+                  active={t(tpl.title) === title}
                   onClick={() => {
-                    setTitle(t.title);
-                    setDescription(t.description);
-                    setAllowed(t.est);
-                    setCategory(t.category);
+                    setTitle(t(tpl.title));
+                    setDescription(t(tpl.description));
+                    setAllowed(tpl.est);
+                    setCategory(t(tpl.category));
                   }}
                 >
-                  {t.title}
+                  {t(tpl.title)}
                 </Chip>
               ))}
             </div>
           )}
           <textarea
             className="field mt-2 min-h-[68px] resize-y"
-            placeholder="Short description or instructions"
-            aria-label="Task description"
+            placeholder={t("Short description or instructions")}
+            aria-label={t("Task description")}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
           />
         </div>
 
         <div>
-          <span className={label}>Assign to</span>
+          <span className={label}>{t("Assign to")}</span>
           {people.length === 0 ? (
-            <p className="text-sm text-paper/55">No one in this department sits beneath your position.</p>
+            <p className="text-sm text-paper/55">{t("No one in this department sits beneath your position.")}</p>
           ) : (
             <div className="space-y-3">
               {groups.map((g) => (
@@ -227,7 +233,7 @@ function ComposerForm({ preset }: { preset: ComposerPreset }) {
                           onClick={() => setAssignee(u.id)}
                           aria-pressed={on}
                           className={cn(
-                            "flex items-center gap-3 rounded-2xl border p-2.5 text-left transition",
+                            "flex items-center gap-3 rounded-2xl border p-2.5 text-start transition",
                             on ? "border-brand/70 bg-brand/14" : "border-white/8 bg-white/[0.03] hover:border-white/25",
                           )}
                         >
@@ -235,7 +241,7 @@ function ComposerForm({ preset }: { preset: ComposerPreset }) {
                           <span className="min-w-0 flex-1 leading-tight">
                             <span className="block truncate text-sm font-semibold">{u.name}</span>
                             <span className="block truncate text-[11px] text-paper/55">
-                              {u.title} · {load} open
+                              {t(u.title)} · {t("{n} open", { n: load })}
                             </span>
                           </span>
                           {on && <Check className="size-4 shrink-0 text-brand" />}
@@ -250,8 +256,8 @@ function ComposerForm({ preset }: { preset: ComposerPreset }) {
         </div>
 
         <div>
-          <span className={label}>Priority</span>
-          <div className="grid grid-cols-4 gap-2" role="radiogroup" aria-label="Priority">
+          <span className={label}>{t("Priority")}</span>
+          <div className="grid grid-cols-4 gap-2" role="radiogroup" aria-label={t("Priority")}>
             {PRIORITIES.map((p) => {
               const on = p === priority;
               const c = PRIORITY_COLOR[p];
@@ -271,7 +277,7 @@ function ComposerForm({ preset }: { preset: ComposerPreset }) {
                     boxShadow: on ? `0 12px 30px -12px ${c}` : `inset 0 0 0 1px ${c}40`,
                   }}
                 >
-                  {PRIORITY_LABEL[p]}
+                  {t(PRIORITY_LABEL[p])}
                 </motion.button>
               );
             })}
@@ -279,7 +285,7 @@ function ComposerForm({ preset }: { preset: ComposerPreset }) {
         </div>
 
         <div>
-          <span className={label}>Time allowed</span>
+          <span className={label}>{t("Time allowed")}</span>
           <div className="flex flex-wrap items-center gap-1.5">
             {TIME_CHOICES.map((m) => (
               <Chip key={m} active={allowed === m} onClick={() => setAllowed(m)}>
@@ -293,21 +299,21 @@ function ComposerForm({ preset }: { preset: ComposerPreset }) {
                 max={600}
                 inputMode="numeric"
                 className="field w-20 py-1.5 text-center"
-                aria-label="Time allowed in minutes"
+                aria-label={t("Time allowed in minutes")}
                 value={allowed || ""}
                 onChange={(e) => setAllowed(Math.max(0, Math.min(600, Math.round(Number(e.target.value) || 0))))}
               />
-              minutes
+              {t("minutes")}
             </label>
           </div>
           <p className="mt-2 flex items-start gap-1.5 text-xs text-paper/50">
             <AlarmClock className="mt-px size-3.5 shrink-0 text-warn" />
-            If the task takes longer than this, the assignee and everyone above them get an alert.
+            {t("If the task takes longer than this, the assignee and everyone above them get an alert.")}
           </p>
         </div>
 
         <div>
-          <span className={label}>Due</span>
+          <span className={label}>{t("Due")}</span>
           <div className="mb-2 flex flex-wrap gap-1.5">
             {quickDue.map(([name, at]) => (
               <Chip key={name} onClick={() => setDue(dueFrom(at()))}>
@@ -319,7 +325,7 @@ function ComposerForm({ preset }: { preset: ComposerPreset }) {
             <input
               type="date"
               className="field"
-              aria-label="Due date"
+              aria-label={t("Due date")}
               value={due.date}
               onChange={(e) => setDue((d) => ({ ...d, date: e.target.value }))}
               required
@@ -327,7 +333,7 @@ function ComposerForm({ preset }: { preset: ComposerPreset }) {
             <input
               type="time"
               className="field"
-              aria-label="Due time (Beirut)"
+              aria-label={t("Due time (Beirut)")}
               value={due.time}
               onChange={(e) => setDue((d) => ({ ...d, time: e.target.value }))}
               required
@@ -343,7 +349,7 @@ function ComposerForm({ preset }: { preset: ComposerPreset }) {
             className="flex items-center gap-1.5 text-xs font-semibold text-paper/55 hover:text-paper"
           >
             <ChevronDown className={cn("size-4 transition-transform", more && "rotate-180")} />
-            Optional: category and internal notes
+            {t("Optional: category and internal notes")}
           </button>
           <AnimatePresence initial={false}>
             {more && (
@@ -356,15 +362,15 @@ function ComposerForm({ preset }: { preset: ComposerPreset }) {
                 <div className="space-y-3 pt-3">
                   <input
                     className="field"
-                    placeholder="Category (for example Opening, Safety)"
-                    aria-label="Task category"
+                    placeholder={t("Category (for example Opening, Safety)")}
+                    aria-label={t("Task category")}
                     value={category}
                     onChange={(e) => setCategory(e.target.value)}
                   />
                   <textarea
                     className="field min-h-[60px]"
-                    placeholder="Internal notes (visible to managers only)"
-                    aria-label="Internal notes"
+                    placeholder={t("Internal notes (visible to managers only)")}
+                    aria-label={t("Internal notes")}
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
                   />
@@ -377,13 +383,13 @@ function ComposerForm({ preset }: { preset: ComposerPreset }) {
 
       <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-white/10 bg-[#0b0f0d] p-4">
         <p className="hidden text-xs text-paper/45 sm:block">
-          {allowed ? `${fmtDuration(allowed * 60)} allowed · ` : ""}
-          {PRIORITY_LABEL[priority]} priority
+          {allowed ? `${t("{time} allowed", { time: fmtDuration(allowed * 60) })} · ` : ""}
+          {t("{priority} priority", { priority: t(PRIORITY_LABEL[priority]) })}
         </p>
-        <div className="ml-auto flex gap-2">
-          <Btn onClick={closeComposer}>Cancel</Btn>
+        <div className="ms-auto flex gap-2">
+          <Btn onClick={closeComposer}>{t("Cancel")}</Btn>
           <Btn variant="primary" type="submit">
-            <Rocket className="size-4" /> Deploy task
+            <Rocket className="size-4" /> {t("Deploy task")}
           </Btn>
         </div>
       </div>
