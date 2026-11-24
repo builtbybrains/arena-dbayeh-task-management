@@ -4,8 +4,10 @@ import { Activity, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { ActivityFeed } from "@/components/activity";
 import { EmployeeCard } from "@/components/department";
-import { Chip, Empty, PageHeader, Panel } from "@/components/kit";
-import { canViewUser, isCompanyWide } from "@/lib/permissions";
+import { Chip, Empty, PageHeader, Panel, Segmented } from "@/components/kit";
+import { PeopleManager } from "@/components/people-manager";
+import { t } from "@/lib/i18n";
+import { canManagePeople, canViewUser, isCompanyWide } from "@/lib/permissions";
 import { employeeToday } from "@/lib/selectors";
 import { useDb, useMe, useNow } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -27,6 +29,9 @@ export default function TeamPage() {
   const [dept, setDept] = useState("");
   const [status, setStatus] = useState<Status>("all");
   const [q, setQ] = useState("");
+  const manage = canManagePeople(me);
+  // A brand-new workspace has no one to watch yet, so start on the people list.
+  const [tab, setTab] = useState<"live" | "people">(() => (manage && db.users.filter((u) => u.active_status).length < 3 ? "people" : "live"));
 
   const rows = useMemo(
     () =>
@@ -56,10 +61,30 @@ export default function TeamPage() {
   return (
     <>
       <PageHeader
-        eyebrow={me.role === "gm" ? "Employees" : "Team Activity"}
-        title="Who is doing what, right now"
-        sub="Live status for each person. “See their screen” opens the demo as that person, so you can see exactly what they see."
-      />
+        eyebrow={t("Team")}
+        title={tab === "people" ? t("People and PINs") : t("Who is doing what, right now")}
+        sub={
+          tab === "people"
+            ? t("Add the team, give each person a position, a department and a PIN to sign in with.")
+            : t("Live status for each person, their queue and what they are working on.")
+        }
+      >
+        {manage && (
+          <Segmented
+            id="team-tab"
+            value={tab}
+            onChange={setTab}
+            options={[
+              { value: "live", label: t("Live status") },
+              { value: "people", label: t("People and PINs") },
+            ]}
+          />
+        )}
+      </PageHeader>
+      {tab === "people" ? (
+        <PeopleManager />
+      ) : (
+        <>
 
       <div className="no-print mb-3 flex gap-1.5 overflow-x-auto pb-1" role="group" aria-label="Filter by status">
         {STATUSES.map(([s, label]) => (
@@ -130,6 +155,8 @@ export default function TeamPage() {
           <ActivityFeed limit={16} deptId={dept || undefined} />
         </Panel>
       </div>
+        </>
+      )}
     </>
   );
 }

@@ -19,13 +19,13 @@ export default function DepartmentsPage() {
     <>
       <PageHeader
         eyebrow="Departments"
-        title="Eight teams, one venue"
+        title="One venue, every team"
         sub="Today's progress in each department. Open one to see its people, queue and activity."
       />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {nodes.map((n, k) => {
           const d = i.deptById.get(n.id)!;
-          const manager = i.userById.get(d.manager_id);
+          const manager = i.userById.get(d.manager_id ?? "");
           const outlets = db.restaurants.filter((r) => r.department_id === n.id);
           const waiters = db.users.filter((u) => outlets.some((r) => r.id === u.restaurant_id)).length;
           return (

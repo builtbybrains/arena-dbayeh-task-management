@@ -413,7 +413,7 @@ export function attentionItems(db: Database, now: number, deptIds?: string[]): A
         kind: "escalated",
         severity: "critical",
         title: t.title,
-        detail: `Escalated to the General Manager by ${name(esc.actor_id)}${esc.new_value ? `: ${esc.new_value}` : "."}`,
+        detail: `Escalated to the Operations Manager by ${name(esc.actor_id)}${esc.new_value ? `: ${esc.new_value}` : "."}`,
         task_id: t.id,
         department_id: t.department_id,
       });
@@ -629,13 +629,13 @@ function describe(db: Database, log: TaskActivityLog): FeedEntry {
       text = `removed ${title}`;
       break;
     case "escalated":
-      text = `escalated ${title} to the General Manager`;
+      text = `escalated ${title} to the Operations Manager`;
       tone = "crit";
       break;
     case "report_submitted":
       text =
         log.new_value === "executive"
-          ? "submitted the consolidated executive report"
+          ? "submitted the consolidated daily venue report"
           : `submitted the ${i.deptById.get(log.new_value ?? "")?.name ?? "department"} daily report`;
       tone = "info";
       break;

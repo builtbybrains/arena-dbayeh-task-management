@@ -2,7 +2,11 @@
 // implementation plan (snake_case) so the local demo store maps 1:1 onto
 // Supabase tables later. All timestamps are ISO-8601 strings in UTC.
 
-export type Role = "owner" | "ceo" | "gm" | "manager" | "employee";
+/**
+ * Chain of command at Arena: the Owner, then the Operations Manager (runs the
+ * whole venue), then department managers (Restaurant, Playground), then staff.
+ */
+export type Role = "owner" | "ops" | "manager" | "employee";
 export type Priority = "critical" | "high" | "medium" | "low";
 export type TaskStatus = "pending" | "in_progress" | "paused" | "completed";
 
@@ -16,6 +20,8 @@ export interface User {
   restaurant_id: string | null; // waiters belong to one restaurant
   avatar: string; // hue (0-360) used to draw the initials avatar
   active_status: boolean;
+  pin_hash: string | null; // SHA-256 of the 4-digit PIN; null in sample mode
+  phone?: string | null;
   created_at: string;
 }
 
@@ -23,7 +29,7 @@ export interface Department {
   id: string;
   name: string;
   short: string;
-  manager_id: string;
+  manager_id: string | null; // null until the Owner adds its manager
   description: string;
   display_order: number;
 }
@@ -56,6 +62,8 @@ export interface Task {
   completed_at: string | null;
   display_order: number | null; // manual rank inside a priority level
   deleted_at: string | null; // soft delete keeps historical reports intact
+  event_id?: string | null; // prep / cleanup work for a booked event
+  recurring_id?: string | null; // created by a recurring schedule
 }
 
 export interface TaskTimeSession {
@@ -81,7 +89,10 @@ export type ActivityAction =
   | "over_time"
   | "removed"
   | "escalated"
-  | "report_submitted";
+  | "report_submitted"
+  | "event_created"
+  | "event_updated"
+  | "event_cancelled";
 
 export interface TaskActivityLog {
   id: string;
@@ -161,9 +172,107 @@ export interface ExecutiveReport {
   executive_notes: string;
 }
 
+// --- Venue: events, walk-ins, revenue ---------------------------------------
+
+export type EventKind = "birthday" | "private" | "school" | "corporate" | "tournament" | "other";
+export type EventStatus = "booked" | "confirmed" | "done" | "cancelled";
+export type Area = "playground" | "restaurant" | "sports" | "whole_venue" | "other";
+
+export interface VenueEvent {
+  id: string;
+  title: string;
+  kind: EventKind;
+  status: EventStatus;
+  starts_at: string; // UTC
+  ends_at: string; // UTC
+  area: Area;
+  kids: number;
+  adults: number;
+  contact_name: string;
+  contact_phone: string;
+  package_price: number; // USD, what the client pays for the package
+  deposit: number; // USD already paid
+  notes: string;
+  owner_id: string | null; // person in charge on the day
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export interface WalkIn {
+  id: string;
+  at: string; // UTC time of arrival
+  kids: number;
+  adults: number;
+  area: Area;
+  amount: number; // USD collected at the door (0 if free)
+  note: string;
+  logged_by: string;
+  deleted_at: string | null;
+}
+
+/** Revenue typed in by a manager for one business day and one source. */
+export interface RevenueEntry {
+  id: string; // `${date}_${source}` so a day has one figure per source
+  date: string; // Beirut business date
+  source: "restaurant" | "other"; // door money and event packages are counted from walk-ins and events
+  amount: number; // USD
+  note: string;
+  entered_by: string;
+  updated_at: string;
+}
+
+// --- Reminders and recurring tasks ------------------------------------------
+
+export interface Reminder {
+  id: string;
+  title: string;
+  note: string;
+  at: string; // UTC moment it fires
+  for_user_ids: string[]; // who gets it
+  created_by: string;
+  event_id: string | null;
+  done_by: string[]; // people who dismissed it
+  created_at: string;
+  deleted_at: string | null;
+}
+
+export type Repeat = "daily" | "weekly" | "monthly";
+
+/** A task that creates itself on a schedule (e.g. the daily opening checklist). */
+export interface RecurringTask {
+  id: string;
+  title: string;
+  description: string;
+  department_id: string;
+  assigned_to: string;
+  priority: Priority;
+  repeat: Repeat;
+  weekdays: number[]; // 0 = Sunday … 6 = Saturday, for weekly
+  month_day: number; // 1-28, for monthly
+  due_time: string; // "HH:MM" Beirut
+  estimated_duration: number; // minutes
+  active: boolean;
+  created_by: string;
+  created_at: string;
+  deleted_at: string | null;
+}
+
+/** Workspace-wide facts: name, currency, who set it up. */
+export interface Workspace {
+  id: "workspace";
+  name: string;
+  created_at: string;
+  created_by: string;
+  walkin_price_kid: number;
+  walkin_price_adult: number;
+}
+
 export interface Database {
   version: number;
   seeded_at: string;
+  workspace: Workspace | null;
   users: User[];
   departments: Department[];
   restaurants: Restaurant[];
@@ -172,7 +281,64 @@ export interface Database {
   logs: TaskActivityLog[];
   daily_reports: DailyReport[];
   executive_reports: ExecutiveReport[];
+  events: VenueEvent[];
+  walkins: WalkIn[];
+  revenue: RevenueEntry[];
+  reminders: Reminder[];
+  recurring: RecurringTask[];
 }
+
+/** The record collections that sync, in the order they load. */
+export const COLLECTIONS = [
+  "users",
+  "departments",
+  "restaurants",
+  "tasks",
+  "sessions",
+  "logs",
+  "daily_reports",
+  "executive_reports",
+  "events",
+  "walkins",
+  "revenue",
+  "reminders",
+  "recurring",
+] as const;
+export type Collection = (typeof COLLECTIONS)[number];
+
+export const EVENT_KIND_LABEL: Record<EventKind, string> = {
+  birthday: "Birthday",
+  private: "Private party",
+  school: "School trip",
+  corporate: "Corporate",
+  tournament: "Tournament",
+  other: "Other",
+};
+export const EVENT_KIND_COLOR: Record<EventKind, string> = {
+  birthday: "#ff7ac6",
+  private: "#a98bff",
+  school: "#5aa9ff",
+  corporate: "#ffc24b",
+  tournament: "#22c73f",
+  other: "#8b958f",
+};
+export const EVENT_STATUS_LABEL: Record<EventStatus, string> = {
+  booked: "Booked",
+  confirmed: "Confirmed",
+  done: "Done",
+  cancelled: "Cancelled",
+};
+export const AREA_LABEL: Record<Area, string> = {
+  playground: "Playground",
+  restaurant: "Restaurant",
+  sports: "Sports courts",
+  whole_venue: "Whole venue",
+  other: "Other",
+};
+export const REVENUE_SOURCE_LABEL: Record<RevenueEntry["source"], string> = {
+  restaurant: "Restaurant sales",
+  other: "Other income",
+};
 
 export const PRIORITIES: Priority[] = ["critical", "high", "medium", "low"];
 export const PRIORITY_RANK: Record<Priority, number> = { critical: 0, high: 1, medium: 2, low: 3 };
@@ -195,12 +361,11 @@ export const STATUS_LABEL: Record<TaskStatus, string> = {
   completed: "Completed",
 };
 /** Position in the chain of command; a lower number is higher up. */
-export const ROLE_RANK: Record<Role, number> = { owner: 0, ceo: 1, gm: 2, manager: 3, employee: 4 };
+export const ROLE_RANK: Record<Role, number> = { owner: 0, ops: 1, manager: 2, employee: 3 };
 
 export const ROLE_LABEL: Record<Role, string> = {
   owner: "Owner",
-  ceo: "CEO",
-  gm: "General Manager",
+  ops: "Operations Manager",
   manager: "Department Manager",
-  employee: "Employee",
+  employee: "Staff",
 };

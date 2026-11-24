@@ -21,7 +21,7 @@ import {
   restaurantSummary,
   sortTasks,
 } from "@/lib/selectors";
-import { switchProfile, useDb, useMe, useNow } from "@/lib/store";
+import { switchProfile, useApp, useDb, useMe, useNow } from "@/lib/store";
 import { fmtDue, fmtDuration } from "@/lib/time";
 import type { Restaurant, User } from "@/lib/types";
 import { openComposer, showOnBoard } from "@/lib/ui";
@@ -38,6 +38,7 @@ const STATUS_TEXT = { working: "Working", paused: "Paused", idle: "No task runni
 export function EmployeeCard({ user }: { user: User }) {
   const db = useDb();
   const me = useMe();
+  const sample = useApp((s) => s.mode === "sample");
   const working = idx(db).openByEmployee.has(user.id);
   const now = useNow(working);
   const [open, setOpen] = useState(false);
@@ -106,9 +107,11 @@ export function EmployeeCard({ user }: { user: User }) {
             <Plus className="size-3.5" /> Assign task
           </Btn>
         )}
-        <Btn size="sm" onClick={() => switchProfile(user.id)} title="Demo shortcut: open this person's own screen">
-          <Eye className="size-3.5" /> See their screen
-        </Btn>
+        {sample && (
+          <Btn size="sm" onClick={() => switchProfile(user.id)} title="Demo shortcut: open this person's own screen">
+            <Eye className="size-3.5" /> See their screen
+          </Btn>
+        )}
         <Btn size="sm" variant="subtle" className="ml-auto" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
           Queue <ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} />
         </Btn>
@@ -156,7 +159,7 @@ export function DepartmentView({ deptId, wide }: { deptId: string; wide?: boolea
   if (!dept || !node || !canViewDepartment(me, deptId)) {
     return <Empty title="No access" hint="Your role cannot open this department." />;
   }
-  const manager = idx(db).userById.get(dept.manager_id);
+  const manager = idx(db).userById.get(dept.manager_id ?? "");
   const people = db.users.filter((u) => u.department_id === deptId && u.active_status && u.role === "employee");
   // A department can contain restaurants; their waiters are shown under each one.
   const outlets = db.restaurants.filter((r) => r.department_id === deptId);

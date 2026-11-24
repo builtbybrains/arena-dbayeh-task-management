@@ -4,21 +4,25 @@
 
 import { departmentSnapshot, executiveSnapshot } from "./selectors";
 import { MANAGER_TEMPLATES, TEMPLATES, type TaskTemplate } from "./templates";
-import { addDays, dateKey, dayEnd, dayStart, iso, MIN } from "./time";
+import { addDays, beirutToUtc, dateKey, dayEnd, dayStart, iso, MIN } from "./time";
 import type {
   ActivityAction,
   Database,
   Department,
   Priority,
+  RecurringTask,
+  Repeat,
   Restaurant,
   Task,
   TaskActivityLog,
   TaskStatus,
   TaskTimeSession,
   User,
+  VenueEvent,
+  WalkIn,
 } from "./types";
 
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 const HOUR = 60 * MIN;
 
 function rng(seed: number) {
@@ -31,26 +35,20 @@ function rng(seed: number) {
   };
 }
 
-// Quatro is the restaurant named on arenadbayeh.com; the Terrace Café is a
-// sample second outlet for the demo.
+// Quatro is the restaurant named on arenadbayeh.com.
 const RESTAURANTS: Omit<Restaurant, "department_id" | "display_order">[] = [
   { id: "quatro", name: "Quatro Restaurant", description: "Main dining room by the playground: international, Italian and Arabic dishes and a kids' menu." },
-  { id: "terrace", name: "Terrace Café", description: "Outdoor terrace for coffee, snacks and light meals. Sample second outlet for the demo." },
 ];
 
 type Person = [name: string, title: string, restaurant?: string];
-const ORG: { id: string; name: string; short: string; description: string; manager: Person; staff: Person[] }[] = [
-  { id: "ops", name: "Operations", short: "OPS", description: "Venue opening, staffing and daily floor operations.", manager: ["Rami Nassar", "Operations Manager"], staff: [["Jad Salem", "Operations Employee"], ["Elias Farah", "Operations Employee"]] },
-  { id: "sales", name: "Sales & Bookings", short: "SALES", description: "Inquiries, corporate clients and booking confirmations.", manager: ["Sarah Daher", "Sales Manager"], staff: [["Nour Haddad", "Sales Executive"], ["Marc Khoury", "Sales Executive"]] },
-  { id: "sports", name: "Sports Facilities", short: "SPORTS", description: "Football pitch, padel courts and sports equipment.", manager: ["Tony Mansour", "Sports Manager"], staff: [["Chris Saad", "Sports Employee"], ["Adam Elias", "Sports Employee"]] },
-  { id: "events", name: "Events & Birthdays", short: "EVENTS", description: "Birthday parties, themed weekends and private events.", manager: ["Lea Nassar", "Events Manager"], staff: [["Rita Farah", "Events Coordinator"], ["Joe Haddad", "Events Employee"]] },
+/** The Operations department is run by the Operations Manager; the others have their own manager. */
+const ORG: { id: string; name: string; short: string; description: string; manager: Person | null; staff: Person[] }[] = [
+  { id: "ops", name: "Operations", short: "OPS", description: "Opening, cleaning, maintenance and the daily floor.", manager: null, staff: [["Jad Salem", "Maintenance Technician"], ["Elias Farah", "Cleaning Supervisor"], ["Hadi Rahme", "Maintenance Technician"]] },
   {
-    id: "restaurant", name: "Restaurants & Hospitality", short: "F&B", description: "The restaurants, their waiters, service and hygiene standards.", manager: ["Fadi Salem", "Restaurant Manager"],
-    staff: [["Mira Daher", "Waiter", "quatro"], ["Samir Khoury", "Waiter", "quatro"], ["Rani Kassab", "Waiter", "quatro"], ["Tala Hanna", "Waiter", "terrace"], ["Karl Habib", "Waiter", "terrace"], ["Jana Matar", "Waiter", "terrace"]],
+    id: "restaurant", name: "Restaurant", short: "F&B", description: "Quatro restaurant: kitchen, waiters and service.", manager: ["Fadi Salem", "Restaurant Manager"],
+    staff: [["Mira Daher", "Waiter", "quatro"], ["Samir Khoury", "Waiter", "quatro"], ["Rani Kassab", "Waiter", "quatro"], ["Tala Hanna", "Cook"], ["Karl Habib", "Barista"]],
   },
-  { id: "maint", name: "Maintenance", short: "MAINT", description: "Lighting, air-conditioning, repairs and equipment safety.", manager: ["Georges Karam", "Maintenance Manager"], staff: [["Ziad Tannous", "Maintenance Technician"], ["Hadi Rahme", "Maintenance Technician"]] },
-  { id: "marketing", name: "Marketing", short: "MKT", description: "Social content, promotions and campaign updates.", manager: ["Yara Saab", "Marketing Manager"], staff: [["Carla Moussa", "Content Creator"], ["Omar Khalil", "Marketing Coordinator"]] },
-  { id: "cx", name: "Customer Experience", short: "CX", description: "Feedback, complaints and front-desk service standards.", manager: ["Dana Azar", "Customer Experience Manager"], staff: [["Lynn Bitar", "Guest Relations Agent"], ["Paul Abboud", "Guest Relations Agent"]] },
+  { id: "playground", name: "Playground", short: "PLAY", description: "Play areas, entry desk, safety and kids' activities.", manager: ["Lea Nassar", "Playground Manager"], staff: [["Rita Farah", "Playground Attendant"], ["Joe Haddad", "Playground Attendant"], ["Nour Haddad", "Entry Desk Cashier"], ["Chris Saad", "Kids Animator"], ["Adam Elias", "Playground Attendant"]] },
 ];
 
 type Slot = "done" | "done_late" | "running" | "running_over" | "paused" | "paused_long" | "pending" | "overdue";
@@ -86,7 +84,7 @@ const EXTRA_PLANS: Plan[] = [
   [["done"], ["pending"], ["pending"], ["pending"]],
 ];
 
-const DEMO_STAFF = new Set(["e_ops_1", "e_restaurant_2"]);
+const DEMO_STAFF = new Set(["e_ops_1", "e_restaurant_2", "e_playground_1"]);
 
 const MANAGER_SLOTS: Slot[] = ["pending", "done", "running", "pending", "done", "overdue", "pending", "paused"];
 
@@ -132,27 +130,27 @@ export function buildSeed(nowMs: number): Database {
   const joined = iso(S - 400 * 24 * HOUR);
   const users: User[] = [];
   const addUser = (uid: string, name: string, role: User["role"], title: string, dept: string | null, manager: string | null, restaurant: string | null = null) => {
-    const u: User = { id: uid, name, role, title, department_id: dept, manager_id: manager, restaurant_id: restaurant, avatar: String((users.length * 47 + 130) % 360), active_status: true, created_at: joined };
+    const u: User = { id: uid, name, role, title, department_id: dept, manager_id: manager, restaurant_id: restaurant, avatar: String((users.length * 47 + 130) % 360), active_status: true, pin_hash: null, phone: null, created_at: joined };
     users.push(u);
     return u;
   };
   const owner = addUser("u_owner", "Alex Haddad", "owner", "Owner", null, null);
-  addUser("u_ceo", "Maya Khoury", "ceo", "Chief Executive Officer", null, owner.id);
-  const gm = addUser("u_gm", "Karim Mansour", "gm", "General Manager", null, "u_ceo");
+  const gm = addUser("m_ops", "Rami Nassar", "ops", "Operations Manager", null, owner.id);
   const departments: Department[] = [];
   const staff: User[] = [];
   const plans: Plan[] = [];
   const managers: User[] = [];
   let extra = 0;
   ORG.forEach((d, n) => {
-    const m = addUser(`m_${d.id}`, d.manager[0], "manager", d.manager[1], d.id, gm.id);
-    managers.push(m);
+    const m = d.manager ? addUser(`m_${d.id}`, d.manager[0], "manager", d.manager[1], d.id, gm.id) : gm;
+    if (d.manager) managers.push(m);
     departments.push({ id: d.id, name: d.name, short: d.short, manager_id: m.id, description: d.description, display_order: n });
     d.staff.forEach((p, k) => {
       staff.push(addUser(`e_${d.id}_${k + 1}`, p[0], "employee", p[1], d.id, m.id, p[2] ?? null));
       plans.push(k < 2 ? PLANS[n * 2 + k] : EXTRA_PLANS[extra++ % EXTRA_PLANS.length]);
     });
   });
+  const managerOf = (dept: string) => managers.find((m) => m.department_id === dept) ?? gm;
   const restaurants: Restaurant[] = RESTAURANTS.map((r, n) => ({ ...r, department_id: "restaurant", display_order: n }));
 
   // --- Tasks ----------------------------------------------------------------
@@ -243,17 +241,18 @@ export function buildSeed(nowMs: number): Database {
 
   staff.forEach((person, n) => {
     const dept = person.department_id!;
-    const manager = managers.find((m) => m.department_id === dept)!;
+    const manager = managerOf(dept);
     const pool = shuffled(TEMPLATES[dept]);
     plans[n].forEach(([slot, forced], k) => addToday(dept, person, k % 4 === 3 ? gm : manager, slot, pool[k % pool.length], forced ?? priority()));
   });
-  managers.forEach((m, n) => addToday(m.department_id!, m, gm, MANAGER_SLOTS[n], MANAGER_TEMPLATES[n % MANAGER_TEMPLATES.length], n === 5 ? "high" : priority()));
+  managers.forEach((m, n) => addToday(m.department_id!, m, gm, MANAGER_SLOTS[n], MANAGER_TEMPLATES[n % MANAGER_TEMPLATES.length], n === 1 ? "high" : priority()));
   addToday("ops", gm, owner, "pending", { title: "Prepare weekly operations briefing for ownership", description: "Summarise the week's performance, open risks and next week's priorities.", est: 45, category: "Management" }, "high");
+  addToday("ops", gm, owner, "running", { title: "Check the weekend staffing plan", description: "Make sure the restaurant and playground have enough people for Saturday's parties.", est: 30, category: "Management" }, "critical");
 
   // Two urgent tasks nobody has picked up yet.
   [
-    { dept: "maint", tpl: TEMPLATES.maint[2], pr: "critical" as Priority, mins: 50 },
-    { dept: "events", tpl: TEMPLATES.events[2], pr: "high" as Priority, mins: 95 },
+    { dept: "ops", tpl: TEMPLATES.ops[10], pr: "critical" as Priority, mins: 50 },
+    { dept: "playground", tpl: TEMPLATES.playground[6], pr: "high" as Priority, mins: 95 },
   ].forEach((u) => push(id("t"), u.tpl, u.dept, gm, null, u.pr, "pending", inDay(now + u.mins * MIN), now - between(15, 40) * MIN, null));
 
   // --- 14 days of history ---------------------------------------------------
@@ -265,7 +264,7 @@ export function buildSeed(nowMs: number): Database {
     const roughDay = d % 5 === 0 ? 0.14 : 0;
     for (const person of staff) {
       const dept = person.department_id!;
-      const manager = managers.find((m) => m.department_id === dept)!;
+      const manager = managerOf(dept);
       const pool = shuffled(TEMPLATES[dept]);
       const count = 2 + (rand() < 0.55 ? 1 : 0);
       for (let k = 0; k < count; k++) {
@@ -275,14 +274,14 @@ export function buildSeed(nowMs: number): Database {
         const created = dS + between(6, 8.5) * HOUR;
         // The demo Employee and Waiter profiles never carry old unfinished work.
         const roll = rand();
-        const stays = d <= 3 && lingering < 6 && !DEMO_STAFF.has(person.id) && roll < (dept === "maint" ? 0.3 : 0.05);
+        const stays = d <= 3 && lingering < 6 && !DEMO_STAFF.has(person.id) && roll < (dept === "ops" ? 0.2 : 0.05);
         if (stays) {
           const pr: Priority = lingering === 0 ? "critical" : lingering === 1 ? "high" : priority();
           lingering++;
           push(tid, tpl, dept, manager, person, pr, "pending", due, created, null);
           continue;
         }
-        const late = rand() < (dept === "maint" ? 0.4 : dept === "events" ? 0.24 : 0.12) + roughDay;
+        const late = rand() < (dept === "ops" ? 0.3 : dept === "playground" ? 0.2 : 0.12) + roughDay;
         const completed = clamp(late ? due + between(10, 120) * MIN : due - between(5, 90) * MIN, created + 20 * MIN, Math.min(dE - MIN, now - MIN));
         const start = Math.max(created + 5 * MIN, completed - tpl.est * MIN * between(0.6, 1.4));
         session(tid, person.id, start, completed);
@@ -292,7 +291,25 @@ export function buildSeed(nowMs: number): Database {
     }
   }
 
-  const db: Database = { version: DB_VERSION, seeded_at: iso(now), users, departments, restaurants, tasks, sessions, logs, daily_reports: [], executive_reports: [] };
+  const db: Database = {
+    version: DB_VERSION,
+    seeded_at: iso(now),
+    workspace: { id: "workspace", name: "Arena Dbayeh", created_at: joined, created_by: owner.id, walkin_price_kid: 10, walkin_price_adult: 0 },
+    users,
+    departments,
+    restaurants,
+    tasks,
+    sessions,
+    logs,
+    daily_reports: [],
+    executive_reports: [],
+    events: [],
+    walkins: [],
+    revenue: [],
+    reminders: [],
+    recurring: [],
+  };
+  seedVenue(db, now, rand, id, { owner, ops: gm, managers, staff });
 
   // --- Submitted reports for every past day ---------------------------------
   for (let d = 14; d >= 1; d--) {
@@ -300,6 +317,7 @@ export function buildSeed(nowMs: number): Database {
     const end = dayEnd(day);
     const ids: string[] = [];
     for (const dep of departments) {
+      if (!dep.manager_id) continue;
       const at = Math.min(dayStart(day) + between(21.5, 23.4) * HOUR, now - MIN);
       const rid = id("dr");
       ids.push(rid);
@@ -315,16 +333,146 @@ export function buildSeed(nowMs: number): Database {
   return db;
 }
 
-/** The profiles offered on the demo login screen. */
+/** The profiles offered on the sample-data login screen. */
 export const DEMO_PROFILES: { userId: string; label: string }[] = [
   { userId: "u_owner", label: "Owner" },
-  { userId: "u_ceo", label: "CEO" },
-  { userId: "u_gm", label: "General Manager" },
   { userId: "m_ops", label: "Operations Manager" },
-  { userId: "m_sales", label: "Sales Manager" },
-  { userId: "m_events", label: "Events Manager" },
-  { userId: "m_sports", label: "Sports Manager" },
   { userId: "m_restaurant", label: "Restaurant Manager" },
-  { userId: "e_ops_1", label: "Employee" },
+  { userId: "m_playground", label: "Playground Manager" },
+  { userId: "e_playground_1", label: "Playground staff" },
   { userId: "e_restaurant_2", label: "Waiter" },
 ];
+
+// --- Events, walk-ins, revenue, reminders and recurring tasks -------------------
+
+const EVENT_SAMPLES: { title: string; kind: VenueEvent["kind"]; area: VenueEvent["area"]; kids: [number, number]; adults: [number, number]; price: [number, number]; hours: [number, number] }[] = [
+  { title: "Birthday party", kind: "birthday", area: "playground", kids: [12, 30], adults: [8, 20], price: [350, 900], hours: [2, 3] },
+  { title: "School trip", kind: "school", area: "playground", kids: [30, 70], adults: [3, 8], price: [400, 1200], hours: [3, 4] },
+  { title: "Corporate family day", kind: "corporate", area: "whole_venue", kids: [20, 50], adults: [30, 80], price: [1500, 4000], hours: [4, 6] },
+  { title: "Private dinner", kind: "private", area: "restaurant", kids: [0, 6], adults: [15, 40], price: [600, 1800], hours: [3, 4] },
+  { title: "Kids football tournament", kind: "tournament", area: "sports", kids: [24, 48], adults: [15, 40], price: [500, 1200], hours: [3, 5] },
+];
+const KID_NAMES = ["Karim", "Lynn", "Jad", "Maya", "Ralph", "Yara", "Charbel", "Lea", "Elio", "Sara", "Joy", "Marc"];
+const CONTACTS = ["Rima Haddad", "Georges Khoury", "Nadine Saab", "Fouad Rahme", "Lara Abboud", "Tony Azar", "Mona Bitar", "Sami Nassar"];
+
+function seedVenue(
+  db: Database,
+  now: number,
+  rand: () => number,
+  id: (p: string) => string,
+  who: { owner: User; ops: User; managers: User[]; staff: User[] },
+) {
+  const today = dateKey(now);
+  const between = (a: number, b: number) => a + rand() * (b - a);
+  const int = (a: number, b: number) => Math.round(between(a, b));
+  const pick = <T,>(arr: T[]): T => arr[Math.floor(rand() * arr.length)];
+  const play = who.managers.find((m) => m.department_id === "playground")!;
+  const rest = who.managers.find((m) => m.department_id === "restaurant")!;
+  const weekday = (k: string) => new Date(`${k}T12:00:00Z`).getUTCDay();
+  const weekend = (k: string) => weekday(k) === 0 || weekday(k) === 6;
+
+  // Events: a few a week, more on weekends, from two weeks back to three weeks ahead.
+  for (let d = -14; d <= 21; d++) {
+    const k = addDays(today, d);
+    const n = weekend(k) ? int(2, 4) : rand() < 0.45 ? 1 : 0;
+    for (let e = 0; e < n; e++) {
+      const tpl = weekend(k) ? pick([EVENT_SAMPLES[0], EVENT_SAMPLES[0], EVENT_SAMPLES[2], EVENT_SAMPLES[4], EVENT_SAMPLES[3]]) : pick([EVENT_SAMPLES[1], EVENT_SAMPLES[0], EVENT_SAMPLES[3]]);
+      const startH = tpl.kind === "school" ? int(9, 10) : tpl.kind === "private" ? int(19, 20) : int(11, 17);
+      const start = beirutToUtc(k, startH, pick([0, 30]));
+      const end = start + Math.round(between(tpl.hours[0], tpl.hours[1])) * HOUR;
+      const title = tpl.kind === "birthday" ? `${pick(KID_NAMES)}'s birthday party` : tpl.title;
+      const past = end < now;
+      const status: VenueEvent["status"] = past ? (rand() < 0.06 ? "cancelled" : "done") : rand() < 0.7 ? "confirmed" : "booked";
+      const price = Math.round(between(tpl.price[0], tpl.price[1]) / 10) * 10;
+      const owner = tpl.area === "restaurant" ? rest : tpl.area === "whole_venue" ? who.ops : play;
+      const ev: VenueEvent = {
+        id: id("ev"),
+        title,
+        kind: tpl.kind,
+        status,
+        starts_at: iso(start),
+        ends_at: iso(end),
+        area: tpl.area,
+        kids: int(tpl.kids[0], tpl.kids[1]),
+        adults: int(tpl.adults[0], tpl.adults[1]),
+        contact_name: pick(CONTACTS),
+        contact_phone: `+961 ${int(3, 81)} ${int(100, 999)} ${int(100, 999)}`,
+        package_price: price,
+        deposit: status === "booked" ? 0 : Math.round(price * 0.3),
+        notes: tpl.kind === "birthday" ? "Theme: superheroes. Cake from the client." : "",
+        owner_id: owner.id,
+        created_by: who.ops.id,
+        created_at: iso(Math.min(now - HOUR, start - between(3, 20) * 24 * HOUR)),
+        updated_at: iso(Math.min(now - HOUR, start - 24 * HOUR)),
+        deleted_at: null,
+      };
+      db.events.push(ev);
+      // Prep and cleanup tasks for today's and tomorrow's events.
+      if (d === 0 || d === 1) {
+        const dept = owner.department_id ?? "ops";
+        const team = who.staff.filter((u) => u.department_id === (dept === "ops" ? "playground" : dept));
+        const prep = [
+          { title: `Prepare the area for ${ev.title}`, at: start - 60 * MIN, est: 40 },
+          { title: `Clean up after ${ev.title}`, at: end + 30 * MIN, est: 30 },
+        ];
+        for (const p of prep) {
+          const to = pick(team);
+          const done = p.at < now - 20 * MIN;
+          const tid = id("t");
+          db.tasks.push({
+            id: tid, title: p.title, description: `For the event “${ev.title}” (${ev.kids} kids, ${ev.adults} adults).`, department_id: to.department_id!, assigned_by: owner.id, assigned_to: to.id,
+            priority: "high", status: done ? "completed" : "pending", due_at: iso(p.at), estimated_duration: p.est, category: "Event", internal_notes: null, completion_note: null,
+            created_at: ev.created_at, updated_at: ev.updated_at, completed_at: done ? iso(p.at - 5 * MIN) : null, display_order: null, deleted_at: null, event_id: ev.id, recurring_id: null,
+          });
+          db.logs.push({ id: id("l"), task_id: tid, actor_id: owner.id, action: "assigned", previous_value: null, new_value: to.id, created_at: ev.created_at });
+          if (done) {
+            db.sessions.push({ id: id("s"), task_id: tid, employee_id: to.id, started_at: iso(p.at - (p.est + 5) * MIN), ended_at: iso(p.at - 5 * MIN), duration_seconds: p.est * 60 });
+          }
+        }
+      }
+      if (!past && status !== "cancelled" && start - 24 * HOUR > now) {
+        db.reminders.push({ id: `ev_${ev.id}_1d`, title: `Tomorrow: ${ev.title}`, note: `${ev.kids} kids, ${ev.adults} adults · ${ev.contact_name}`, at: iso(start - 24 * HOUR), for_user_ids: [owner.id, who.ops.id], created_by: who.ops.id, event_id: ev.id, done_by: [], created_at: ev.created_at, deleted_at: null });
+      }
+    }
+  }
+
+  // Walk-ins: groups arriving through the day, busier at weekends and afternoons.
+  const desk = who.staff.filter((u) => u.department_id === "playground");
+  for (let d = 28; d >= 0; d--) {
+    const k = addDays(today, -d);
+    const groups = Math.round(weekend(k) ? between(28, 45) : between(12, 24));
+    for (let g = 0; g < groups; g++) {
+      const hour = rand() < 0.55 ? between(14, 19.5) : between(10, 14);
+      const at = beirutToUtc(k, Math.floor(hour), Math.floor((hour % 1) * 60));
+      if (at > now - 2 * MIN) continue;
+      const kids = int(1, 4);
+      const adults = int(1, 2);
+      const area: WalkIn["area"] = rand() < 0.82 ? "playground" : rand() < 0.5 ? "restaurant" : "sports";
+      db.walkins.push({ id: id("w"), at: iso(at), kids, adults, area, amount: area === "playground" ? kids * 10 : 0, note: "", logged_by: pick(desk).id, deleted_at: null });
+    }
+  }
+
+  // Restaurant sales typed in each evening.
+  for (let d = 28; d >= 1; d--) {
+    const k = addDays(today, -d);
+    const amount = Math.round((weekend(k) ? between(1800, 3200) : between(700, 1500)) / 10) * 10;
+    db.revenue.push({ id: `${k}_restaurant`, date: k, source: "restaurant", amount, note: "", entered_by: rest.id, updated_at: iso(dayStart(k) + 23 * HOUR) });
+  }
+
+  // Recurring tasks.
+  const rule = (title: string, description: string, dept: string, to: User, by: User, repeat: Repeat, due: string, est: number, weekdays: number[] = [], month_day = 1): RecurringTask => ({
+    id: id("rc"), title, description, department_id: dept, assigned_to: to.id, priority: "high", repeat, weekdays, month_day, due_time: due, estimated_duration: est, active: true, created_by: by.id, created_at: iso(dayStart(addDays(today, -30))), deleted_at: null,
+  });
+  db.recurring.push(
+    rule("Daily playground opening check", "Inspect every play zone, nets and padding before doors open.", "playground", who.staff.find((u) => u.department_id === "playground")!, play, "daily", "09:30", 30),
+    rule("Weekly deep clean of soft play", "Full sanitise of the soft-play zone, ball pit and mats.", "playground", who.staff.filter((u) => u.department_id === "playground")[1], play, "weekly", "22:00", 90, [1]),
+    rule("Kitchen hygiene checklist", "Fridges, prep surfaces, hand-wash points and temperatures.", "restaurant", who.staff.find((u) => u.title === "Cook")!, rest, "daily", "11:00", 25),
+    rule("Monthly generator service", "Run, check oil and log fuel for the backup generator.", "ops", who.staff.find((u) => u.department_id === "ops")!, who.ops, "monthly", "10:00", 45, [], 1),
+  );
+
+  // A couple of personal reminders.
+  db.reminders.push(
+    { id: id("r"), title: "Call the inflatable supplier about the repair", note: "Ask for the quote by Friday.", at: iso(now - 25 * MIN), for_user_ids: [who.ops.id], created_by: who.owner.id, event_id: null, done_by: [], created_at: iso(now - 3 * HOUR), deleted_at: null },
+    { id: id("r"), title: "Count the entry desk cash", note: "", at: iso(beirutToUtc(today, 22, 0)), for_user_ids: [play.id], created_by: play.id, event_id: null, done_by: [], created_at: iso(now - 5 * HOUR), deleted_at: null },
+  );
+}

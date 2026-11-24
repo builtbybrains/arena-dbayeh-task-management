@@ -1,5 +1,7 @@
 // Business dates use Asia/Beirut; storage stays in UTC.
 
+import { locale, t } from "./i18n";
+
 export const TZ = "Asia/Beirut";
 export const DAY_MS = 86_400_000;
 export const MIN = 60_000;
@@ -71,31 +73,33 @@ export function fromInputs(key: string, time: string): string {
   return iso(beirutToUtc(key, h || 0, m || 0));
 }
 
-const timeFmt = new Intl.DateTimeFormat("en-GB", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
-const dayFmt = new Intl.DateTimeFormat("en-GB", { timeZone: TZ, weekday: "short", day: "numeric", month: "short" });
-const shortDayFmt = new Intl.DateTimeFormat("en-GB", { timeZone: TZ, day: "numeric", month: "short" });
-const longDayFmt = new Intl.DateTimeFormat("en-GB", {
-  timeZone: TZ,
-  weekday: "long",
-  day: "numeric",
-  month: "long",
-  year: "numeric",
-});
+// Formatters follow the app language (Arabic month and day names, Western digits).
+const fmtCache = new Map<string, Intl.DateTimeFormat>();
+function dtf(name: string, opts: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+  const loc = locale();
+  const k = `${loc}|${name}`;
+  let f = fmtCache.get(k);
+  if (!f) fmtCache.set(k, (f = new Intl.DateTimeFormat(loc, { timeZone: TZ, ...opts })));
+  return f;
+}
 
 const num = (t: number | string) => (typeof t === "string" ? Date.parse(t) : t);
-export const fmtTime = (t: number | string) => timeFmt.format(num(t));
-export const fmtDay = (t: number | string) => dayFmt.format(num(t));
-export const fmtKey = (key: string) => dayFmt.format(beirutToUtc(key, 12));
-export const fmtKeyShort = (key: string) => shortDayFmt.format(beirutToUtc(key, 12));
-export const fmtKeyLong = (key: string) => longDayFmt.format(beirutToUtc(key, 12));
+export const fmtTime = (t: number | string) => dtf("time", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(num(t));
+export const fmtDay = (t: number | string) => dtf("day", { weekday: "short", day: "numeric", month: "short" }).format(num(t));
+export const fmtKey = (key: string) => fmtDay(beirutToUtc(key, 12));
+export const fmtKeyShort = (key: string) => dtf("short", { day: "numeric", month: "short" }).format(beirutToUtc(key, 12));
+export const fmtKeyLong = (key: string) =>
+  dtf("long", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(beirutToUtc(key, 12));
+/** "November 2026" for a business date. */
+export const fmtMonth = (key: string) => dtf("month", { month: "long", year: "numeric" }).format(beirutToUtc(key, 12));
 
 /** Deadline label relative to now: "Today 18:30", "Tomorrow 09:00", "Tue 4 Nov 14:00". */
 export function fmtDue(due: string, now: number): string {
   const k = dateKey(due);
   const today = dateKey(now);
-  if (k === today) return `Today ${fmtTime(due)}`;
-  if (k === addDays(today, 1)) return `Tomorrow ${fmtTime(due)}`;
-  if (k === addDays(today, -1)) return `Yesterday ${fmtTime(due)}`;
+  if (k === today) return t("Today {time}", { time: fmtTime(due) });
+  if (k === addDays(today, 1)) return t("Tomorrow {time}", { time: fmtTime(due) });
+  if (k === addDays(today, -1)) return t("Yesterday {time}", { time: fmtTime(due) });
   return `${fmtDay(due)} ${fmtTime(due)}`;
 }
 
@@ -111,26 +115,26 @@ export function fmtClock(totalSeconds: number): string {
 /** Compact duration: "2h 05m", "18m", "45s". */
 export function fmtDuration(totalSeconds: number): string {
   const s = Math.max(0, Math.round(totalSeconds));
-  if (s < 60) return `${s}s`;
+  if (s < 60) return t("{n}s", { n: s });
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
-  if (h === 0) return `${m}m`;
-  return `${h}h ${pad(m)}m`;
+  if (h === 0) return t("{n}m", { n: m });
+  return t("{h}h {m}m", { h, m: pad(m) });
 }
 
-export function fmtAgo(t: number | string, now: number): string {
-  const diff = Math.max(0, now - num(t));
+export function fmtAgo(at: number | string, now: number): string {
+  const diff = Math.max(0, now - num(at));
   const m = Math.floor(diff / MIN);
-  if (m < 1) return "just now";
-  if (m < 60) return `${m}m ago`;
+  if (m < 1) return t("just now");
+  if (m < 60) return t("{n}m ago", { n: m });
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
+  if (h < 24) return t("{n}h ago", { n: h });
+  return t("{n}d ago", { n: Math.floor(h / 24) });
 }
 
 export function greeting(now: number): string {
   const h = beirutHour(now);
-  if (h < 12) return "Good Morning";
-  if (h < 18) return "Good Afternoon";
-  return "Good Evening";
+  if (h < 12) return t("Good Morning");
+  if (h < 18) return t("Good Afternoon");
+  return t("Good Evening");
 }

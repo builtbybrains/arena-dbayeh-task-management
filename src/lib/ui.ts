@@ -33,12 +33,13 @@ export const NO_FILTERS: BoardFilters = { quick: "open", assignee: "", dept: "",
 
 interface UiState {
   demoOpen: boolean;
+  walkIn: boolean;
   composer: ComposerPreset | null;
   board: BoardFilters;
 }
 
 /** Transient interface state shared across screens (never persisted). */
-export const useUi = create<UiState>(() => ({ demoOpen: false, composer: null, board: NO_FILTERS }));
+export const useUi = create<UiState>(() => ({ demoOpen: false, walkIn: false, composer: null, board: NO_FILTERS }));
 
 export const openDemo = () => useUi.setState({ demoOpen: true });
 export const closeDemo = () => useUi.setState({ demoOpen: false });

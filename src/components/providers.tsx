@@ -5,18 +5,24 @@ import { useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
 import { Avatar, EASE } from "@/components/kit";
 import { Toaster } from "@/components/ui/sonner";
+import { initLang, t, useLang } from "@/lib/i18n";
 import { homeFor } from "@/lib/permissions";
 import { boot, clearSwitch, completeSwitch, useApp } from "@/lib/store";
 
 export function Providers({ children }: { children: ReactNode }) {
+  const lang = useLang((s) => s.lang);
   useEffect(() => {
+    initLang();
     boot();
   }, []);
   return (
     <MotionConfig reducedMotion="user">
-      {children}
+      {/* Switching language re-renders every screen with the new text and direction. */}
+      <div key={lang} className="contents">
+        {children}
+      </div>
       <RoleTransition />
-      <Toaster position="top-center" />
+      <Toaster position="top-center" dir={lang === "ar" ? "rtl" : "ltr"} />
     </MotionConfig>
   );
 }
@@ -68,9 +74,9 @@ function RoleTransition() {
           >
             <Avatar user={user} size={76} />
             <div>
-              <p className="eyebrow">Entering as</p>
+              <p className="eyebrow">{t("Entering as")}</p>
               <p className="display mt-1 text-4xl">{user.name}</p>
-              <p className="mt-1.5 text-sm text-paper/60">{user.title}</p>
+              <p className="mt-1.5 text-sm text-paper/60">{t(user.title)}</p>
             </div>
           </motion.div>
         </motion.div>

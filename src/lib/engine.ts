@@ -16,13 +16,13 @@ import type { ActivityAction, Database, Priority, Task, TaskActivityLog, TaskTim
 
 export class DomainError extends Error {}
 
-const fail = (message: string): never => {
+export const fail = (message: string): never => {
   throw new DomainError(message);
 };
 
-const uid = (p: string) => `${p}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+export const uid = (p: string) => `${p}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 
-function entry(
+export function entry(
   now: number,
   task_id: string | null,
   actor_id: string,
@@ -82,6 +82,7 @@ export interface NewTaskInput {
   estimated_duration?: number | null;
   category?: string | null;
   internal_notes?: string | null;
+  event_id?: string | null;
 }
 
 export function createTask(db: Database, actor: User, now: number, input: NewTaskInput): Database {
@@ -114,6 +115,8 @@ export function createTask(db: Database, actor: User, now: number, input: NewTas
     completed_at: null,
     display_order: null,
     deleted_at: null,
+    event_id: input.event_id ?? null,
+    recurring_id: null,
   };
   return {
     ...db,
@@ -266,7 +269,7 @@ export function reorderTasks(db: Database, actor: User, now: number, orderedIds:
 export function escalateTask(db: Database, actor: User, now: number, taskId: string, reason: string): Database {
   const task = getTask(db, taskId);
   if (!canEscalate(actor, task)) fail("Only the department manager can escalate this task.");
-  if (idx(db).escalated.has(taskId)) fail("This task is already escalated to the General Manager.");
+  if (idx(db).escalated.has(taskId)) fail("This task is already escalated to the Operations Manager.");
   return { ...db, logs: [...db.logs, entry(now, taskId, actor.id, "escalated", null, reason.trim() || null)] };
 }
 
@@ -301,7 +304,7 @@ export function submitDailyReport(
 }
 
 export function reviewDailyReport(db: Database, actor: User, _now: number, reportId: string): Database {
-  if (actor.role !== "gm") fail("Only the General Manager marks department reports as reviewed.");
+  if (actor.role !== "ops" && actor.role !== "owner") fail("Only the Operations Manager marks department reports as reviewed.");
   return {
     ...db,
     daily_reports: db.daily_reports.map((r) => (r.id === reportId ? { ...r, status: "reviewed" as const } : r)),
@@ -309,7 +312,7 @@ export function reviewDailyReport(db: Database, actor: User, _now: number, repor
 }
 
 export function submitExecutiveReport(db: Database, actor: User, now: number, date: string, notes: string): Database {
-  if (!canSubmitExecutiveReport(actor)) fail("Only the General Manager submits the executive report.");
+  if (!canSubmitExecutiveReport(actor)) fail("Only the Operations Manager submits the daily venue report.");
   const included = db.daily_reports.filter((r) => r.report_date === date);
   if (included.length === 0) fail("No department has submitted a report for this day yet.");
   const existing = db.executive_reports.find((r) => r.report_date === date);

@@ -1,13 +1,10 @@
 import type { NextConfig } from "next";
 
+// Static export: the app is plain HTML/JS served from Cloudflare's free plan.
+// Shared data goes through the tiny sync API in worker/ (see README).
 const nextConfig: NextConfig = {
-  cacheComponents: true,
-  partialPrefetching: true,
-  experimental: {
-    // The demo renders in the browser from local demo data behind a loading
-    // gate, so only validate segments that opt in to instant navigation.
-    instantInsights: { validationLevel: "manual-warning" },
-  },
+  output: "export",
+  trailingSlash: true,
   turbopack: {
     rules: {
       "*.css": {

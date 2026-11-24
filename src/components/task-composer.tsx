@@ -41,7 +41,10 @@ function ComposerForm({ preset }: { preset: ComposerPreset }) {
   const [dept, setDept] = useState(preset.department_id ?? me.department_id ?? depts[0]?.id ?? "");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [assignee, setAssignee] = useState(preset.assigned_to ?? "");
+  // The Owner normally hands work to the Operations Manager, who passes it on.
+  const [assignee, setAssignee] = useState(
+    preset.assigned_to ?? (me.role === "owner" ? (db.users.find((u) => u.role === "ops" && u.active_status)?.id ?? "") : ""),
+  );
   const [priority, setPriority] = useState<Priority>("medium");
   const [allowed, setAllowed] = useState(30); // minutes
   const [due, setDue] = useState(() => {

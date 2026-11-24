@@ -2,15 +2,15 @@
 // these helpers, so hiding a button is never the only protection. In production
 // the same rules belong in Supabase row-level security.
 
-import type { Database, Role, Task, User } from "./types";
+import type { Database, Role, Task, User, WalkIn } from "./types";
 import { ROLE_RANK } from "./types";
 
-export const isExec = (u: User) => u.role === "owner" || u.role === "ceo";
-export const isCompanyWide = (u: User) => isExec(u) || u.role === "gm";
+export const isExec = (u: User) => u.role === "owner";
+export const isCompanyWide = (u: User) => u.role === "owner" || u.role === "ops";
 
 /**
- * Chain of command: Owner > CEO > General Manager > Department Manager >
- * Employee. A department manager's chain is their own department only.
+ * Chain of command: Owner > Operations Manager > Department Manager (Restaurant,
+ * Playground) > Staff. A department manager's chain is their own department.
  */
 export function isBeneath(actor: User, target: User): boolean {
   if (ROLE_RANK[target.role] <= ROLE_RANK[actor.role]) return false;
@@ -49,8 +49,9 @@ export function assignableDepartmentIds(db: Database, actor: User): string[] {
 
 /**
  * Who `actor` may assign a task to inside a department: everyone beneath them
- * in the chain of command. The Owner can assign straight to a waiter; the CEO
- * and General Manager (who sit above the departments) appear in every one.
+ * in the chain of command. The Owner usually hands work to the Operations
+ * Manager (who sits above the departments and appears in every one) but can
+ * also assign straight to anyone.
  */
 export function assignableUsers(db: Database, actor: User, deptId: string): User[] {
   if (actor.role === "manager" && actor.department_id !== deptId) return [];
@@ -81,13 +82,39 @@ export const canEscalate = (actor: User, t: Task) =>
   actor.role === "manager" && t.department_id === actor.department_id && t.status !== "completed";
 export const canSeeInternalNotes = (actor: User) => actor.role !== "employee";
 export const canSubmitDepartmentReport = (actor: User, deptId: string) =>
-  actor.role === "manager" && actor.department_id === deptId;
-export const canSubmitExecutiveReport = (actor: User) => actor.role === "gm";
+  (actor.role === "manager" && actor.department_id === deptId) ||
+  (actor.role === "ops" && deptId === "ops");
+export const canSubmitExecutiveReport = (actor: User) => actor.role === "ops";
 export const canViewReports = (actor: User) => actor.role !== "employee";
+
+// --- Venue ---------------------------------------------------------------------
+export const canManageEvents = (actor: User) => actor.role !== "employee";
+export const canLogWalkIn = (actor: User) => actor.active_status;
+/** Fix or remove a walk-in: managers, or the person who logged it within the hour. */
+export const canEditWalkIn = (actor: User, w: WalkIn, now: number) =>
+  actor.role !== "employee" || (w.logged_by === actor.id && now - Date.parse(w.at) < 60 * 60 * 1000);
+export const canEnterRevenue = (actor: User) => actor.role !== "employee";
+export const canSeeRevenue = (actor: User) => actor.role === "owner" || actor.role === "ops";
+export const canManageRecurring = (actor: User) => actor.role !== "employee";
+/** Add people, set PINs, change roles: the Owner for everyone, Ops for everyone below. */
+export function canManagePerson(actor: User, target: User | null): boolean {
+  if (actor.role === "owner") return true;
+  if (actor.role !== "ops") return false;
+  return !target || ROLE_RANK[target.role] > ROLE_RANK.ops;
+}
+export const canManagePeople = (actor: User) => actor.role === "owner" || actor.role === "ops";
+export const canEraseWorkspace = (actor: User) => actor.role === "owner";
+
+/** People a reminder can be sent to: yourself and anyone beneath you. */
+export function remindableUsers(db: Database, actor: User): User[] {
+  return db.users.filter((u) => u.active_status && (u.id === actor.id || isBeneath(actor, u)));
+}
 
 export interface NavItem {
   href: string;
   label: string;
+  /** Shown in the phone's bottom bar; the rest sit behind "More". */
+  mobile?: boolean;
   icon:
     | "radar"
     | "tasks"
@@ -101,37 +128,39 @@ export interface NavItem {
     | "target"
     | "trend"
     | "user"
-    | "building";
+    | "building"
+    | "calendar"
+    | "door";
 }
 
-const EXEC_NAV: NavItem[] = [
-  { href: "/command", label: "Command Center", icon: "radar" },
-  { href: "/tasks", label: "All Tasks", icon: "tasks" },
+const TOP_NAV: NavItem[] = [
+  { href: "/command", label: "Command Center", icon: "radar", mobile: true },
+  { href: "/tasks", label: "All Tasks", icon: "tasks", mobile: true },
+  { href: "/calendar", label: "Calendar", icon: "calendar", mobile: true },
+  { href: "/walk-ins", label: "Walk-ins", icon: "door", mobile: true },
   { href: "/departments", label: "Departments", icon: "network" },
-  { href: "/team", label: "Team Activity", icon: "users" },
+  { href: "/team", label: "Team", icon: "users" },
   { href: "/reports", label: "Reports", icon: "reports" },
   { href: "/settings", label: "Settings", icon: "settings" },
 ];
 
 const NAV: Record<Role, NavItem[]> = {
-  owner: EXEC_NAV,
-  ceo: EXEC_NAV,
-  gm: [
-    { href: "/command", label: "Command Center", icon: "radar" },
-    { href: "/tasks", label: "Task Deployment", icon: "rocket" },
-    { href: "/departments", label: "Departments", icon: "network" },
-    { href: "/team", label: "Employees", icon: "users" },
-    { href: "/reports", label: "Reports", icon: "reports" },
-  ],
+  owner: TOP_NAV,
+  ops: TOP_NAV,
   manager: [
-    { href: "/department", label: "My Department", icon: "building" },
-    { href: "/tasks", label: "Assign Tasks", icon: "send" },
-    { href: "/team", label: "Team Activity", icon: "users" },
+    { href: "/department", label: "My Department", icon: "building", mobile: true },
+    { href: "/tasks", label: "Assign Tasks", icon: "send", mobile: true },
+    { href: "/calendar", label: "Calendar", icon: "calendar", mobile: true },
+    { href: "/walk-ins", label: "Walk-ins", icon: "door", mobile: true },
+    { href: "/team", label: "Team", icon: "users" },
     { href: "/reports", label: "Reports", icon: "reports" },
+    { href: "/settings", label: "Settings", icon: "settings" },
   ],
   employee: [
-    { href: "/my-day", label: "My Day", icon: "sun" },
-    { href: "/my-tasks", label: "My Tasks", icon: "target" },
+    { href: "/my-day", label: "My Day", icon: "sun", mobile: true },
+    { href: "/my-tasks", label: "My Tasks", icon: "target", mobile: true },
+    { href: "/calendar", label: "Calendar", icon: "calendar", mobile: true },
+    { href: "/walk-ins", label: "Walk-ins", icon: "door", mobile: true },
     { href: "/my-progress", label: "My Progress", icon: "trend" },
     { href: "/profile", label: "Profile", icon: "user" },
   ],
@@ -149,28 +178,23 @@ export function canAccessRoute(u: User, path: string): boolean {
 /** Plain-language permission summary shown on the role selector and profile. */
 export const ROLE_PERMISSIONS: Record<Role, string[]> = {
   owner: [
-    "Sees every department, employee and task",
-    "Assigns tasks to anyone in the company",
-    "Reviews and exports all reports",
+    "Sees everything: tasks, events, walk-ins and revenue",
+    "Assigns to the Operations Manager, or anyone directly",
+    "Adds people, sets their PINs and reviews all reports",
   ],
-  ceo: [
-    "Company-wide visibility in real time",
-    "Assigns tasks to anyone beneath the CEO",
-    "Reviews and exports all reports",
-  ],
-  gm: [
-    "Runs daily operations across all departments",
-    "Assigns tasks to managers and all staff",
-    "Submits the daily executive report",
+  ops: [
+    "Runs daily operations across the whole venue",
+    "Passes tasks on to managers and staff",
+    "Books events and submits the daily report to the Owner",
   ],
   manager: [
     "Sees only their own department",
     "Assigns tasks and time limits to their team",
-    "Submits the daily department report",
+    "Books events and submits the daily department report",
   ],
   employee: [
     "Sees only their own tasks",
     "Starts, pauses and completes tasks",
-    "Gets an alert when a task runs over its time",
+    "Logs walk-ins and sees the event calendar",
   ],
 };

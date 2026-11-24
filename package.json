@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "bundle": "node scripts/bundle-assets.mjs",
+    "deploy": "next build && node scripts/bundle-assets.mjs && wrangler deploy",
+    "worker:dev": "next build && node scripts/bundle-assets.mjs && wrangler dev --local"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

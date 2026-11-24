@@ -8,9 +8,8 @@ import { useMe } from "@/lib/store";
 import { openComposer } from "@/lib/ui";
 
 const COPY = {
-  owner: ["All Tasks", "Every task, by priority", "Company-wide view. You can assign a task to anyone in the company."],
-  ceo: ["All Tasks", "Every task, by priority", "Company-wide view. You can assign a task to anyone beneath you."],
-  gm: ["Task Deployment", "Assign. Prioritise. Track.", "Deploy tasks to any department, reassign and reprioritise in one place."],
+  owner: ["All Tasks", "Every task, by priority", "Hand work to the Operations Manager, or assign anyone directly."],
+  ops: ["All Tasks", "Assign. Prioritise. Track.", "Pass tasks on to the managers and staff, reassign and reprioritise in one place."],
   manager: ["Assign Tasks", "Your team's queue", "Assign tasks to your team, set priorities and follow them to completion."],
   employee: ["Tasks", "Tasks", ""],
 } as const;

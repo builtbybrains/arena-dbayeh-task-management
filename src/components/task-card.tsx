@@ -348,11 +348,11 @@ function TaskDetails({ task, siblings }: { task: Task; siblings?: string[] }) {
       {canEscalate(me, task) &&
         (escalated ? (
           <p className="flex items-center gap-2 text-xs font-semibold text-crit">
-            <Flag className="size-3.5" /> Escalated to the General Manager
+            <Flag className="size-3.5" /> Escalated to the Operations Manager
           </p>
         ) : (
           <Btn size="sm" variant="danger" onClick={() => actions.escalateTask(task.id, "")}>
-            <Flag className="size-3.5" /> Escalate to General Manager
+            <Flag className="size-3.5" /> Escalate to Operations Manager
           </Btn>
         ))}
 

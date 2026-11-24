@@ -54,7 +54,7 @@ export default function CommandCenterPage() {
       </PageHeader>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Total employees" value={k.employees} icon={<Users className="size-4" />} sub="across 8 departments" />
+        <Stat label="Total employees" value={k.employees} icon={<Users className="size-4" />} sub={`across ${db.departments.length} departments`} />
         <Stat label="Working now" value={k.working} tone="brand" icon={<Zap className="size-4" />} sub="with a task timer running" />
         <Stat label="Tasks assigned today" value={k.assigned} icon={<ListChecks className="size-4" />} sub="due today" />
         <Stat label="In progress" value={k.in_progress} tone="brand" icon={<Play className="size-4" />} sub="running right now" />

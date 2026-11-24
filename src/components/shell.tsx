@@ -2,8 +2,15 @@
 
 import {
   Bell,
+  BellRing,
   Building2,
+  CalendarDays,
   ChartColumn,
+  Cloud,
+  CloudOff,
+  DoorOpen,
+  Ellipsis,
+  Languages,
   ListChecks,
   LogOut,
   Network,
@@ -27,12 +34,28 @@ import { AttentionList } from "@/components/activity";
 import { ArenaMark, Avatar, Btn, EASE, Loader, Logo } from "@/components/kit";
 import { TaskComposer } from "@/components/task-composer";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { WalkInQuick } from "@/components/walk-in-quick";
+import { setLang, t, useLang } from "@/lib/i18n";
 import { canAccessRoute, homeFor, isCompanyWide, navFor, type NavItem } from "@/lib/permissions";
+import { useSync } from "@/lib/repository";
 import { notificationsFor, type AttentionItem } from "@/lib/selectors";
-import { resetDemo, signOut, switchProfile, useApp, useDb, useMe, useNow } from "@/lib/store";
-import { dateKey, fmtKeyLong, fmtTime } from "@/lib/time";
+import {
+  actions,
+  enableBrowserNotifications,
+  leaveMode,
+  resetDemo,
+  signOut,
+  switchProfile,
+  syncNow,
+  useApp,
+  useDb,
+  useMe,
+  useNow,
+} from "@/lib/store";
+import { dateKey, fmtAgo, fmtKeyLong, fmtTime } from "@/lib/time";
 import type { User } from "@/lib/types";
 import { closeDemo, openDemo, showOnBoard, useUi, type BoardQuick } from "@/lib/ui";
+import { dueReminders, type ReminderItem } from "@/lib/venue";
 import { cn } from "@/lib/utils";
 
 const ICONS: Record<NavItem["icon"], LucideIcon> = {
@@ -49,6 +72,8 @@ const ICONS: Record<NavItem["icon"], LucideIcon> = {
   trend: TrendingUp,
   user: UserIcon,
   building: Building2,
+  calendar: CalendarDays,
+  door: DoorOpen,
 };
 
 const SHORT: Record<string, string> = {
@@ -64,11 +89,14 @@ const SHORT: Record<string, string> = {
   "My Tasks": "Tasks",
 };
 
+const shortLabel = (label: string) => t(SHORT[label] ?? label);
+
 /** Gate + chrome for every signed-in screen. Access is checked here centrally. */
 export function AppShell({ children }: { children: ReactNode }) {
   const ready = useApp((s) => s.ready);
   const me = useApp((s) => (s.db && s.userId ? (s.db.users.find((u) => u.id === s.userId) ?? null) : null));
   const switching = useApp((s) => s.switchingTo !== null);
+  const mode = useApp((s) => s.mode);
   const pathname = usePathname();
   const router = useRouter();
   const allowed = me ? canAccessRoute(me, pathname) : false;
@@ -86,7 +114,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="min-h-dvh">
       <Dock items={items} pathname={pathname} me={me} />
       <TopBar me={me} />
-      <main className="print-root mx-auto w-full max-w-[1560px] px-4 pt-20 pb-28 md:pr-8 md:pb-12 md:pl-[104px]">
+      <main className="print-root mx-auto w-full max-w-[1560px] px-4 pt-20 pb-28 md:pe-8 md:pb-12 md:ps-[104px]">
         <motion.div
           key={pathname}
           initial={{ opacity: 0, y: 18 }}
@@ -97,8 +125,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         </motion.div>
       </main>
       <MobileDock items={items} pathname={pathname} />
-      <DemoControls />
+      {mode === "sample" ? <DemoControls /> : <AccountMenu />}
       <TaskComposer />
+      <WalkInQuick />
     </div>
   );
 }
@@ -111,9 +140,9 @@ function Dock({ items, pathname, me }: { items: NavItem[]; pathname: string; me:
   return (
     <nav
       aria-label="Main"
-      className="no-print group/dock glass fixed top-1/2 left-4 z-40 hidden w-[60px] -translate-y-1/2 flex-col gap-1 overflow-hidden rounded-[28px] p-2 transition-[width] duration-300 ease-out focus-within:w-60 hover:w-60 md:flex"
+      className="no-print group/dock glass fixed top-1/2 start-4 z-40 hidden w-[60px] -translate-y-1/2 flex-col gap-1 overflow-hidden rounded-[28px] p-2 transition-[width] duration-300 ease-out focus-within:w-60 hover:w-60 md:flex"
     >
-      <Link href={homeFor(me.role)} className="mb-2 flex h-11 items-center gap-3 pl-0.5" aria-label="Arena OS home">
+      <Link href={homeFor(me.role)} className="mb-2 flex h-11 items-center gap-3 ps-0.5" aria-label="Arena OS home">
         <ArenaMark className="h-[18px] w-[44px] shrink-0 text-paper" />
         <span className={cn(label, "display text-base")}>
           Arena <span className="text-brand">OS</span>
@@ -140,88 +169,260 @@ function Dock({ items, pathname, me }: { items: NavItem[]; pathname: string; me:
               />
             )}
             <Icon className="relative size-5 shrink-0" />
-            <span className={label}>{item.label}</span>
+            <span className={label}>{t(item.label)}</span>
           </Link>
         );
       })}
       <button
         type="button"
         onClick={openDemo}
-        className="mt-2 flex h-11 items-center gap-3 rounded-2xl pl-1 text-left text-sm font-semibold text-paper/70 hover:text-paper"
+        className="mt-2 flex h-11 items-center gap-3 rounded-2xl ps-1 text-start text-sm font-semibold text-paper/70 hover:text-paper"
       >
         <Avatar user={me} size={36} />
-        <span className={label}>Switch profile</span>
+        <span className={label}>{t("Account")}</span>
       </button>
     </nav>
   );
 }
 
 function MobileDock({ items, pathname }: { items: NavItem[]; pathname: string }) {
+  const [more, setMore] = useState(false);
+  const main = items.filter((i) => i.mobile);
+  const rest = items.filter((i) => !i.mobile);
+  const restActive = rest.some((i) => isActive(pathname, i.href));
+  const cell = "relative flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-2xl py-2 text-[10px] font-semibold";
   return (
-    <nav
-      aria-label="Main"
-      className="no-print glass-solid fixed inset-x-3 bottom-3 z-40 flex items-stretch rounded-3xl p-1.5 md:hidden"
-    >
-      {items.map((item) => {
-        const Icon = ICONS[item.icon];
-        const on = isActive(pathname, item.href);
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            aria-current={on ? "page" : undefined}
-            className={cn(
-              "relative flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-2xl py-2 text-[10px] font-semibold",
-              on ? "text-brand-soft" : "text-paper/55",
-            )}
-          >
-            {on && <motion.span layoutId="mobile-dock-active" className="absolute inset-0 rounded-2xl bg-brand/14" />}
-            <Icon className="relative size-5" />
-            <span className="relative truncate">{SHORT[item.label] ?? item.label}</span>
-          </Link>
-        );
-      })}
-    </nav>
+    <>
+      <nav aria-label="Main" className="no-print glass-solid fixed inset-x-3 bottom-3 z-40 flex items-stretch rounded-3xl p-1.5 md:hidden">
+        {main.map((item) => {
+          const Icon = ICONS[item.icon];
+          const on = isActive(pathname, item.href);
+          return (
+            <Link key={item.href} href={item.href} aria-current={on ? "page" : undefined} className={cn(cell, on ? "text-brand-soft" : "text-paper/55")}>
+              {on && <motion.span layoutId="mobile-dock-active" className="absolute inset-0 rounded-2xl bg-brand/14" />}
+              <Icon className="relative size-5" />
+              <span className="relative truncate">{shortLabel(item.label)}</span>
+            </Link>
+          );
+        })}
+        {rest.length > 0 && (
+          <button type="button" onClick={() => setMore(true)} className={cn(cell, restActive ? "text-brand-soft" : "text-paper/55")}>
+            {restActive && <span className="absolute inset-0 rounded-2xl bg-brand/14" />}
+            <Ellipsis className="relative size-5" />
+            <span className="relative truncate">{t("More")}</span>
+          </button>
+        )}
+      </nav>
+      <Dialog open={more} onOpenChange={setMore}>
+        <DialogContent className="glass-solid block rounded-3xl p-4 sm:max-w-sm">
+          <DialogTitle className="display mb-3 text-2xl">{t("More")}</DialogTitle>
+          <DialogDescription className="sr-only">{t("Other screens")}</DialogDescription>
+          <div className="grid grid-cols-2 gap-2">
+            {rest.map((item) => {
+              const Icon = ICONS[item.icon];
+              const on = isActive(pathname, item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setMore(false)}
+                  className={cn(
+                    "flex items-center gap-2.5 rounded-2xl border p-3 text-sm font-semibold",
+                    on ? "border-brand/60 bg-brand/12 text-brand-soft" : "border-white/8 bg-white/[0.03] text-paper/80",
+                  )}
+                >
+                  <Icon className="size-5 shrink-0" /> {t(item.label)}
+                </Link>
+              );
+            })}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
 function TopBar({ me }: { me: User }) {
   const now = useNow();
+  const mode = useApp((s) => s.mode);
   return (
-    <header className="no-print pointer-events-none fixed inset-x-0 top-0 z-30 flex h-16 items-center justify-between gap-3 bg-gradient-to-b from-ink via-ink/85 to-transparent px-4 md:pr-8 md:pl-[104px]">
+    <header className="no-print pointer-events-none fixed inset-x-0 top-0 z-30 flex h-16 items-center justify-between gap-2 bg-gradient-to-b from-ink via-ink/85 to-transparent px-4 md:pe-8 md:ps-[104px]">
       <div className="pointer-events-auto flex min-w-0 items-center gap-3">
-        <Logo className="md:hidden" />
+        <Logo compact className="sm:hidden" />
+        <Logo className="hidden sm:flex md:hidden" />
         <p className="hidden text-sm text-paper/55 md:block">
           <span className="font-semibold text-paper/85">{fmtKeyLong(dateKey(now))}</span>
           <span className="tnum mx-2 text-paper/30">·</span>
-          <span className="tnum">{fmtTime(now)} Beirut</span>
+          <span className="tnum">{fmtTime(now)}</span>
         </p>
       </div>
-      <div className="pointer-events-auto flex items-center gap-2">
-        <Alerts me={me} />
+      <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-2">
         <button
           type="button"
-          onClick={openDemo}
-          className="flex h-8 items-center gap-2 rounded-full border border-warn/40 bg-warn/10 px-3 text-[11px] font-bold tracking-[0.14em] text-warn uppercase"
-          title="This is a demonstration environment with fictional sample data"
+          onClick={() => useUi.setState({ walkIn: true })}
+          className="flex h-10 items-center gap-1.5 rounded-full bg-brand px-3 text-sm font-bold text-ink shadow-[0_8px_26px_-10px_rgb(34_199_63/80%)]"
+          aria-label={t("Log a walk-in")}
         >
-          <span className="size-1.5 rounded-full bg-warn" />
-          Demo<span className="hidden lg:inline"> · sample data</span>
+          <DoorOpen className="size-4" />
+          <span className="hidden sm:inline">{t("Walk-in")}</span>
         </button>
+        <LangToggle />
+        <Alerts me={me} />
+        {mode === "sample" ? (
+          <button
+            type="button"
+            onClick={openDemo}
+            className="hidden h-8 items-center gap-2 rounded-full border border-warn/40 bg-warn/10 px-3 text-[11px] font-bold tracking-[0.14em] text-warn uppercase sm:flex"
+            title={t("Sample data: fictional people and tasks")}
+          >
+            <span className="size-1.5 rounded-full bg-warn" />
+            {t("Sample")}
+          </button>
+        ) : (
+          <SyncDot />
+        )}
         <button
           type="button"
           onClick={openDemo}
-          className="glass flex items-center gap-2.5 rounded-full py-1 pr-1 pl-1 sm:pr-4"
-          aria-label={`Signed in as ${me.name}, ${me.title}. Switch demo profile`}
+          className="glass flex items-center gap-2.5 rounded-full p-1 sm:pe-4"
+          aria-label={t("Signed in as {name}. Open account menu", { name: me.name })}
         >
           <Avatar user={me} size={32} />
-          <span className="hidden text-left leading-tight sm:block">
+          <span className="hidden text-start leading-tight sm:block">
             <span className="block text-sm font-semibold">{me.name}</span>
-            <span className="block text-[11px] text-paper/55">{me.title}</span>
+            <span className="block text-[11px] text-paper/55">{t(me.title)}</span>
           </span>
         </button>
       </div>
     </header>
+  );
+}
+
+export function LangToggle({ className }: { className?: string }) {
+  const lang = useLang((s) => s.lang);
+  return (
+    <button
+      type="button"
+      onClick={() => setLang(lang === "ar" ? "en" : "ar")}
+      className={cn("glass grid h-10 min-w-10 place-items-center rounded-full px-2 text-sm font-bold", className)}
+      aria-label={lang === "ar" ? "Switch to English" : "التبديل إلى العربية"}
+      title={lang === "ar" ? "English" : "العربية"}
+    >
+      {lang === "ar" ? "EN" : "ع"}
+    </button>
+  );
+}
+
+function SyncDot() {
+  const { status, lastSync, pending } = useSync();
+  const now = useNow();
+  const ok = status === "synced";
+  const label =
+    status === "offline"
+      ? t("Offline. {n} changes will send when the connection is back.", { n: pending })
+      : status === "syncing"
+        ? t("Saving…")
+        : lastSync
+          ? t("Saved for everyone · {ago}", { ago: fmtAgo(lastSync, now) })
+          : t("Connecting…");
+  return (
+    <button
+      type="button"
+      onClick={() => void syncNow()}
+      className={cn(
+        "glass hidden size-10 place-items-center rounded-full sm:grid",
+        status === "offline" ? "text-warn" : ok ? "text-brand" : "text-paper/60",
+      )}
+      title={label}
+      aria-label={label}
+    >
+      {status === "offline" ? <CloudOff className="size-[18px]" /> : <Cloud className={cn("size-[18px]", status === "syncing" && "animate-pulse")} />}
+    </button>
+  );
+}
+
+/** Real workspace: who is signed in on this phone, language, notifications, sign out. */
+function AccountMenu() {
+  const open = useUi((s) => s.demoOpen);
+  const me = useMe();
+  const router = useRouter();
+  const lang = useLang((s) => s.lang);
+  const { status, pending } = useSync();
+  const [notif, setNotif] = useState<NotificationPermission | "unsupported">(() =>
+    typeof Notification === "undefined" ? "unsupported" : Notification.permission,
+  );
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && closeDemo()}>
+      <DialogContent className="glass-solid block max-h-[88dvh] overflow-y-auto rounded-3xl p-5 sm:max-w-md">
+        <div className="flex items-center gap-3">
+          <Avatar user={me} size={52} />
+          <div className="min-w-0">
+            <DialogTitle className="display text-2xl">{me.name}</DialogTitle>
+            <DialogDescription className="text-paper/60">{t(me.title)}</DialogDescription>
+          </div>
+        </div>
+        <div className="mt-5 space-y-2">
+          <Row icon={<Languages className="size-4" />} label={t("Language")}>
+            <div className="glass inline-flex rounded-full p-1">
+              {(["en", "ar"] as const).map((l) => (
+                <button
+                  key={l}
+                  type="button"
+                  onClick={() => setLang(l)}
+                  className={cn("rounded-full px-3 py-1 text-sm font-semibold", lang === l ? "bg-brand text-ink" : "text-paper/65")}
+                >
+                  {l === "en" ? "English" : "العربية"}
+                </button>
+              ))}
+            </div>
+          </Row>
+          <Row icon={<BellRing className="size-4" />} label={t("Phone notifications")}>
+            {notif === "granted" ? (
+              <span className="text-sm font-semibold text-brand">{t("On")}</span>
+            ) : notif === "unsupported" ? (
+              <span className="text-xs text-paper/50">{t("Not supported here")}</span>
+            ) : notif === "denied" ? (
+              <span className="text-xs text-paper/50">{t("Blocked in browser settings")}</span>
+            ) : (
+              <Btn size="sm" onClick={async () => setNotif((await enableBrowserNotifications()) ? "granted" : Notification.permission)}>
+                {t("Turn on")}
+              </Btn>
+            )}
+          </Row>
+          <Row icon={status === "offline" ? <CloudOff className="size-4" /> : <Cloud className="size-4" />} label={t("Sync")}>
+            <span className={cn("text-sm font-semibold", status === "offline" ? "text-warn" : "text-brand")}>
+              {status === "offline" ? t("Offline ({n} waiting)", { n: pending }) : status === "syncing" ? t("Saving…") : t("Up to date")}
+            </span>
+          </Row>
+        </div>
+        <p className="mt-3 text-xs leading-relaxed text-paper/45">
+          {t("Reminders pop up while Arena OS is open. With phone notifications on, they also appear when the tab is in the background.")}
+        </p>
+        <div className="mt-5 flex flex-wrap justify-end gap-2">
+          <Btn
+            variant="danger"
+            onClick={() => {
+              closeDemo();
+              signOut();
+              router.push("/");
+            }}
+          >
+            <LogOut className="size-4" /> {t("Sign out")}
+          </Btn>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function Row({ icon, label, children }: { icon: ReactNode; label: string; children: ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/8 bg-white/[0.03] px-3 py-2.5">
+      <span className="flex items-center gap-2 text-sm font-semibold text-paper/80">
+        <span className="text-brand">{icon}</span> {label}
+      </span>
+      {children}
+    </div>
   );
 }
 
@@ -234,11 +435,11 @@ function DemoControls() {
   const [confirm, setConfirm] = useState(false);
 
   const groups = useMemo(() => {
-    const exec = db.users.filter((u) => u.role === "owner" || u.role === "ceo" || u.role === "gm");
+    const exec = db.users.filter((u) => u.role === "owner" || u.role === "ops");
     return [
-      { label: "Executive", users: exec },
+      { label: t("Leadership"), users: exec },
       ...db.departments.map((d) => ({
-        label: d.name,
+        label: t(d.name),
         users: db.users.filter((u) => u.department_id === d.id).sort((a, b) => (a.role === "manager" ? -1 : b.role === "manager" ? 1 : 0)),
       })),
     ];
@@ -256,11 +457,15 @@ function DemoControls() {
     >
       <DialogContent className="glass-solid block max-h-[88dvh] overflow-x-hidden overflow-y-auto rounded-3xl p-0 sm:max-w-2xl">
         <div className="p-5 pb-3">
-          <p className="eyebrow !text-warn">Demonstration environment</p>
-          <DialogTitle className="display mt-1 text-3xl">Switch profile</DialogTitle>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="eyebrow !text-warn">{t("Sample data")}</p>
+              <DialogTitle className="display mt-1 text-3xl">{t("Switch profile")}</DialogTitle>
+            </div>
+            <LangToggle />
+          </div>
           <DialogDescription className="mt-2 text-paper/60">
-            Every person and task here is fictional sample data. Pick a profile to see the same data from another role.
-            This switcher exists only for the demo and is not a sign-in system.
+            {t("Every person and task here is fictional sample data. Pick a profile to see the same data from another role.")}
           </DialogDescription>
         </div>
         <div className="space-y-4 px-5 pb-5">
@@ -277,7 +482,7 @@ function DemoControls() {
                       if (u.id !== me.id) switchProfile(u.id);
                     }}
                     className={cn(
-                      "flex items-center gap-2.5 rounded-2xl border p-2 text-left transition",
+                      "flex items-center gap-2.5 rounded-2xl border p-2 text-start transition",
                       u.id === me.id
                         ? "border-brand/60 bg-brand/12"
                         : "border-white/8 bg-white/[0.03] hover:border-white/25 hover:bg-white/[0.07]",
@@ -287,7 +492,7 @@ function DemoControls() {
                     <span className="min-w-0 leading-tight">
                       <span className="block truncate text-sm font-semibold">{u.name}</span>
                       <span className="block truncate text-[11px] text-paper/55">
-                        {u.id === me.id ? "Current profile" : u.title}
+                        {u.id === me.id ? t("Current profile") : t(u.title)}
                       </span>
                     </span>
                   </button>
@@ -300,10 +505,10 @@ function DemoControls() {
           {confirm ? (
             <>
               <p className="min-w-0 flex-1 text-sm text-paper/75">
-                Reset everything to the original sample data? Changes made in this demo will be lost.
+                {t("Reset everything to the original sample data? Changes made in this demo will be lost.")}
               </p>
               <Btn size="sm" onClick={() => setConfirm(false)}>
-                Cancel
+                {t("Cancel")}
               </Btn>
               <Btn
                 size="sm"
@@ -314,24 +519,24 @@ function DemoControls() {
                   closeDemo();
                 }}
               >
-                Yes, reset demo
+                {t("Yes, reset demo")}
               </Btn>
             </>
           ) : (
             <>
               <Btn size="sm" variant="subtle" onClick={() => setConfirm(true)}>
-                <RotateCcw className="size-4" /> Reset demo
+                <RotateCcw className="size-4" /> {t("Reset demo")}
               </Btn>
               <Btn
                 size="sm"
                 variant="subtle"
                 onClick={() => {
                   closeDemo();
-                  signOut();
+                  leaveMode();
                   router.push("/");
                 }}
               >
-                <LogOut className="size-4" /> Back to role selection
+                <LogOut className="size-4" /> {t("Leave sample data")}
               </Btn>
             </>
           )}
@@ -341,13 +546,15 @@ function DemoControls() {
   );
 }
 
-/** Alert bell: tasks over their time allowed, overdue work and anything else waiting on this person. */
+/** Alert bell: reminders that are due, tasks over their time allowed, overdue work and anything else waiting on this person. */
 function Alerts({ me }: { me: User }) {
   const db = useDb();
   const now = useNow();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const items = useMemo(() => notificationsFor(db, me, now), [db, me, now]);
+  const reminders = useMemo(() => dueReminders(db, me, now), [db, me, now]);
+  const total = items.length + reminders.length;
   const critical = items.some((i) => i.severity === "critical");
 
   const go = (item: AttentionItem) => {
@@ -374,37 +581,64 @@ function Alerts({ me }: { me: User }) {
     router.push("/tasks");
   };
 
+  const openReminder = (r: ReminderItem) => {
+    setOpen(false);
+    if (r.task_id) router.push(me.role === "employee" ? "/my-day" : "/tasks");
+    else router.push("/calendar");
+  };
+
   return (
     <>
       <button
         type="button"
         onClick={() => setOpen(true)}
         className="glass relative grid size-10 place-items-center rounded-full"
-        aria-label={items.length === 1 ? "1 alert" : `${items.length} alerts`}
+        aria-label={total === 1 ? t("1 alert") : t("{n} alerts", { n: total })}
       >
         <Bell className="size-[18px]" />
-        {items.length > 0 && (
+        {total > 0 && (
           <span
             className={cn(
-              "tnum absolute -top-1 -right-1 grid h-5 min-w-5 place-items-center rounded-full px-1 text-[10px] font-bold text-ink",
-              critical ? "bg-crit" : "bg-warn",
+              "tnum absolute -top-1 -end-1 grid h-5 min-w-5 place-items-center rounded-full px-1 text-[10px] font-bold text-ink",
+              critical ? "bg-crit" : reminders.length ? "bg-med" : "bg-warn",
             )}
           >
-            {items.length}
+            {total}
           </span>
         )}
       </button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="glass-solid block max-h-[88dvh] overflow-x-hidden overflow-y-auto rounded-3xl p-5 sm:max-w-lg">
-          <p className="eyebrow">Alerts</p>
+          <p className="eyebrow">{t("Alerts")}</p>
           <DialogTitle className="display mt-1 text-3xl">
-            {items.length === 0 ? "All clear" : items.length === 1 ? "1 alert" : `${items.length} alerts`}
+            {total === 0 ? t("All clear") : total === 1 ? t("1 alert") : t("{n} alerts", { n: total })}
           </DialogTitle>
           <DialogDescription className="mt-1.5 mb-4 text-paper/55">
-            Tasks running past their time allowed, overdue work and other items that need attention. This list updates
-            by itself.
+            {t("Reminders, tasks running past their time allowed, overdue work and other items that need attention.")}
           </DialogDescription>
-          <AttentionList items={items} onItem={go} limit={8} />
+          {reminders.length > 0 && (
+            <div className="mb-4">
+              <p className="mb-1.5 text-[11px] font-semibold tracking-[0.14em] text-paper/45 uppercase">{t("Reminders")}</p>
+              <ul className="space-y-1.5">
+                {reminders.slice(0, 8).map((r) => (
+                  <li key={r.id} className="flex items-start gap-3 rounded-2xl border border-med/30 bg-med/8 p-3">
+                    <BellRing className="mt-0.5 size-4 shrink-0 text-med" />
+                    <button type="button" onClick={() => openReminder(r)} className="min-w-0 flex-1 text-start">
+                      <span className="block text-sm font-semibold">{r.title}</span>
+                      {r.note && <span className="block text-xs text-paper/60">{r.note}</span>}
+                      <span className="tnum block text-[11px] text-paper/45">{fmtAgo(r.at, now)}</span>
+                    </button>
+                    {r.reminder && (
+                      <Btn size="sm" variant="subtle" onClick={() => actions.dismissReminder(r.id)}>
+                        {t("Done")}
+                      </Btn>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {(items.length > 0 || reminders.length === 0) && <AttentionList items={items} onItem={go} limit={8} />}
         </DialogContent>
       </Dialog>
     </>

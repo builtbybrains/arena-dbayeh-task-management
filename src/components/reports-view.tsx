@@ -96,7 +96,7 @@ interface Sort {
 }
 
 const TAB_TITLE: Record<Tab, string> = {
-  executive: "Executive report",
+  executive: "Daily venue report",
   departments: "Department report",
   employees: "Employee report",
   submissions: "Report submissions",
@@ -709,8 +709,8 @@ function ExecutiveSection({
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/8 bg-white/[0.025] px-3 py-2.5">
           <p className="text-sm text-paper/75">
             {exec
-              ? `Executive report submitted at ${fmtTime(exec.submitted_at)} by ${i.userById.get(exec.submitted_by)?.name ?? "the General Manager"}.`
-              : "The consolidated executive report has not been submitted for this day."}
+              ? `Daily venue report submitted at ${fmtTime(exec.submitted_at)} by ${i.userById.get(exec.submitted_by)?.name ?? "the Operations Manager"}.`
+              : "The consolidated daily venue report has not been submitted for this day."}
           </p>
           <Btn size="sm" className="no-print" onClick={onOpenSubmissions}>
             Open submissions
@@ -756,7 +756,7 @@ function DepartmentsSection({
     [db, period, anchor, from, to, now, deptId],
   );
   const dept = i.deptById.get(deptId);
-  const manager = dept ? i.userById.get(dept.manager_id) : undefined;
+  const manager = dept ? i.userById.get(dept.manager_id ?? "") : undefined;
 
   if (!canViewDepartment(me, deptId)) {
     return <Empty icon={<Building2 className="size-6" />} title="Not your department" hint="You can only open reports for your own department." />;
@@ -970,15 +970,15 @@ function ManagerSubmissions({
                 value={notes}
                 maxLength={600}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="Anything the General Manager should know about this day"
+                placeholder="Anything the Operations Manager should know about this day"
               />
               <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
                 <p className="max-w-xl text-xs text-paper/55">
                   {existing
                     ? changed
                       ? "The numbers have changed since you submitted. Resubmit to send the latest figures."
-                      : "Already with the General Manager. You can resubmit if anything changes."
-                    : "Submitting freezes these figures and sends them to the General Manager."}
+                      : "Already with the Operations Manager. You can resubmit if anything changes."
+                    : "Submitting freezes these figures and sends them to the Operations Manager."}
                 </p>
                 <Btn
                   variant="primary"
@@ -990,7 +990,7 @@ function ManagerSubmissions({
                   {existing ? "Resubmit report" : "Submit report"}
                 </Btn>
               </div>
-              <AnimatePresence>{sent && <SuccessNote text="Report sent to the General Manager." />}</AnimatePresence>
+              <AnimatePresence>{sent && <SuccessNote text="Report sent to the Operations Manager." />}</AnimatePresence>
             </div>
           ) : (
             <p className="mt-4 text-xs text-paper/50">
@@ -1015,7 +1015,7 @@ function ManagerSubmissions({
   );
 }
 
-// --- Submissions: General Manager, Owner, CEO --------------------------------
+// --- Submissions: Operations Manager, Owner --------------------------------
 
 function CompanySubmissions({
   db,
@@ -1068,7 +1068,7 @@ function CompanySubmissions({
           return r ? (
             <DailyReportCard key={d.id} db={db} report={r} canReview={isGm} />
           ) : (
-            <MissingRow key={d.id} dept={d} manager={i.userById.get(d.manager_id)} />
+            <MissingRow key={d.id} dept={d} manager={i.userById.get(d.manager_id ?? "")} />
           );
         })}
       </div>
@@ -1077,7 +1077,7 @@ function CompanySubmissions({
 
   const executiveReports = (
     <Panel
-      title={isGm ? "Executive reports sent" : "Executive reports"}
+      title={isGm ? "Daily venue reports sent" : "Daily venue reports"}
       icon={<FileText className="size-4" />}
       right={<span className="tnum text-xs text-paper/55">{history.length} on record</span>}
     >
@@ -1085,12 +1085,12 @@ function CompanySubmissions({
         <p className="mb-3 flex items-center gap-2 rounded-xl border border-warn/25 bg-warn/[0.07] px-3 py-2.5 text-sm text-warn">
           <Clock className="size-4 shrink-0" />
           {isGm
-            ? `You have not sent the executive report for ${fmtKey(anchor)} yet.`
-            : `The General Manager has not submitted the executive report for ${fmtKey(anchor)} yet.`}
+            ? `You have not sent the daily venue report for ${fmtKey(anchor)} yet.`
+            : `The Operations Manager has not submitted the daily venue report for ${fmtKey(anchor)} yet.`}
         </p>
       )}
       {history.length === 0 ? (
-        <Empty icon={<FileText className="size-6" />} title="No executive reports yet" />
+        <Empty icon={<FileText className="size-6" />} title="No daily venue reports yet" />
       ) : (
         <div className="space-y-2">
           {history.slice(0, 15).map((r) => (
@@ -1115,7 +1115,7 @@ function CompanySubmissions({
       {departmentReports}
 
       <Panel
-        title="Consolidated executive report"
+        title="Consolidated daily venue report"
         icon={<Send className="size-4" />}
         right={
           exec ? (
@@ -1129,7 +1129,7 @@ function CompanySubmissions({
         }
       >
         <p className="text-sm text-paper/60">
-          Combines every department report submitted for {fmtKey(anchor)} into one report for the Owner and CEO.
+          Combines every department report submitted for {fmtKey(anchor)} into one report for the Owner.
         </p>
         <TotalsGrid t={preview} className="mt-4" />
         {preview.missing_departments.length > 0 && (
@@ -1151,7 +1151,7 @@ function CompanySubmissions({
         {open ? (
           <div className="no-print mt-5 rounded-2xl border border-white/8 bg-white/[0.025] p-3.5">
             <label htmlFor="executive-notes" className="text-[11px] font-semibold tracking-[0.14em] text-paper/55 uppercase">
-              Notes for the Owner and CEO (optional)
+              Notes for the Owner (optional)
             </label>
             <textarea
               id="executive-notes"
@@ -1177,14 +1177,14 @@ function CompanySubmissions({
                 }}
               >
                 <Send className="size-4" />
-                {exec ? "Resubmit executive report" : "Submit consolidated executive report"}
+                {exec ? "Resubmit daily venue report" : "Submit consolidated daily venue report"}
               </Btn>
             </div>
-            <AnimatePresence>{sent && <SuccessNote text="Executive report sent to the Owner and CEO." />}</AnimatePresence>
+            <AnimatePresence>{sent && <SuccessNote text="Daily venue report sent to the Owner." />}</AnimatePresence>
           </div>
         ) : (
           <p className="mt-4 text-xs text-paper/50">
-            Executive reports can be submitted for today and yesterday. Earlier days are read-only.
+            Daily venue reports can be submitted for today and yesterday. Earlier days are read-only.
           </p>
         )}
       </Panel>
@@ -1260,7 +1260,7 @@ function ExecutiveReportCard({ db, report, defaultOpen }: { db: Database; report
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-semibold">{fmtKeyLong(report.report_date)}</span>
             <span className="block truncate text-xs text-paper/55">
-              Submitted at {fmtTime(report.submitted_at)} by {by?.name ?? "the General Manager"} ·{" "}
+              Submitted at {fmtTime(report.submitted_at)} by {by?.name ?? "the Operations Manager"} ·{" "}
               {report.department_report_ids.length} department {report.department_report_ids.length === 1 ? "report" : "reports"}
             </span>
           </span>
@@ -1300,7 +1300,7 @@ function ExecutiveReportCard({ db, report, defaultOpen }: { db: Database; report
           </p>
         </div>
       </div>
-      {report.executive_notes && <NotesBlock label="General Manager's notes" text={report.executive_notes} className="mt-3" />}
+      {report.executive_notes && <NotesBlock label="Operations Manager's notes" text={report.executive_notes} className="mt-3" />}
     </Expandable>
   );
 }

@@ -1,0 +1,18 @@
+{
+  // Cloudflare free plan: the sync API and the static app, bundled into one worker.
+  // Deploy: npm run deploy
+  "name": "arena-dbayeh",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-10-19",
+  "account_id": "a8d3660dfd5c80a1303cd37effc25160",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "arena-dbayeh",
+      "database_id": "8ad1feae-ce03-4df1-8738-a393c6d26670"
+    }
+  ],
+  "workers_dev": true,
+  "preview_urls": false,
+  "observability": { "enabled": true }
+}
