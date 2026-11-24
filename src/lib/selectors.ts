@@ -1,6 +1,7 @@
 // Read side: every number on screen is derived here from tasks, time sessions
 // and activity logs. Nothing is hard-coded.
 
+import { t as tr } from "./i18n";
 import { canViewTask, isCompanyWide } from "./permissions";
 import { addDays, dateKey, dayStart, fmtDuration, MIN, ms } from "./time";
 import type {
@@ -223,10 +224,10 @@ export function employeeRows(db: Database, users: User[], from: string, to: stri
 
 function followUpReason(db: Database, t: Task, now: number): string | null {
   if (t.status === "completed") return null;
-  if (!t.assigned_to) return "No one is assigned";
-  if (ms(t.due_at) < now) return `Overdue by ${fmtDuration((now - ms(t.due_at)) / 1000)}`;
+  if (!t.assigned_to) return tr("No one is assigned");
+  if (ms(t.due_at) < now) return tr("Overdue by {time}", { time: fmtDuration((now - ms(t.due_at)) / 1000) });
   const pausedFor = pausedMinutes(db, t, now);
-  if (pausedFor >= PAUSED_TOO_LONG_MIN) return `Paused for ${fmtDuration(pausedFor * 60)}`;
+  if (pausedFor >= PAUSED_TOO_LONG_MIN) return tr("Paused for {time}", { time: fmtDuration(pausedFor * 60) });
   return null;
 }
 
@@ -399,8 +400,8 @@ export interface AttentionItem {
 export function attentionItems(db: Database, now: number, deptIds?: string[]): AttentionItem[] {
   const i = idx(db);
   const inScope = (deptId: string) => !deptIds || deptIds.includes(deptId);
-  const name = (id: string | null) => (id ? (i.userById.get(id)?.name ?? "Someone") : "No one");
-  const dept = (id: string) => i.deptById.get(id)?.name ?? id;
+  const name = (id: string | null) => (id ? (i.userById.get(id)?.name ?? tr("Someone")) : tr("No one"));
+  const dept = (id: string) => tr(i.deptById.get(id)?.name ?? id);
   const out: AttentionItem[] = [];
   const open = i.live.filter((t) => t.status !== "completed" && inScope(t.department_id));
 
@@ -413,7 +414,9 @@ export function attentionItems(db: Database, now: number, deptIds?: string[]): A
         kind: "escalated",
         severity: "critical",
         title: t.title,
-        detail: `Escalated to the Operations Manager by ${name(esc.actor_id)}${esc.new_value ? `: ${esc.new_value}` : "."}`,
+        detail: esc.new_value
+          ? tr("Escalated to the Operations Manager by {name}: {reason}", { name: name(esc.actor_id), reason: esc.new_value })
+          : tr("Escalated to the Operations Manager by {name}.", { name: name(esc.actor_id) }),
         task_id: t.id,
         department_id: t.department_id,
       });
@@ -424,7 +427,11 @@ export function attentionItems(db: Database, now: number, deptIds?: string[]): A
         kind: "critical_overdue",
         severity: "critical",
         title: t.title,
-        detail: `Critical task overdue by ${fmtDuration((now - ms(t.due_at)) / 1000)}. ${name(t.assigned_to)} is assigned (${dept(t.department_id)}).`,
+        detail: tr("Critical task overdue by {time}. {name} is assigned ({dept}).", {
+          time: fmtDuration((now - ms(t.due_at)) / 1000),
+          name: name(t.assigned_to),
+          dept: dept(t.department_id),
+        }),
         task_id: t.id,
         department_id: t.department_id,
       });
@@ -435,7 +442,10 @@ export function attentionItems(db: Database, now: number, deptIds?: string[]): A
         kind: "unassigned",
         severity: t.priority === "critical" ? "critical" : "warning",
         title: t.title,
-        detail: `${PRIORITY_LABEL[t.priority]} task in ${dept(t.department_id)} has no one assigned.`,
+        detail: tr("{priority} task in {dept} has no one assigned.", {
+          priority: tr(PRIORITY_LABEL[t.priority]),
+          dept: dept(t.department_id),
+        }),
         task_id: t.id,
         department_id: t.department_id,
       });
@@ -447,7 +457,17 @@ export function attentionItems(db: Database, now: number, deptIds?: string[]): A
         kind: "over_time",
         severity: over > t.estimated_duration * 30 ? "critical" : "warning",
         title: t.title,
-        detail: `${t.status === "in_progress" ? "Running" : "Stopped at"} ${fmtDuration(over)} over the ${fmtDuration(t.estimated_duration * 60)} allowed. ${name(t.assigned_to)} (${dept(t.department_id)}).`,
+        detail: tr(
+          t.status === "in_progress"
+            ? "Running {over} over the {allowed} allowed. {name} ({dept})."
+            : "Stopped at {over} over the {allowed} allowed. {name} ({dept}).",
+          {
+            over: fmtDuration(over),
+            allowed: fmtDuration(t.estimated_duration * 60),
+            name: name(t.assigned_to),
+            dept: dept(t.department_id),
+          },
+        ),
         task_id: t.id,
         department_id: t.department_id,
         user_id: t.assigned_to,
@@ -460,7 +480,11 @@ export function attentionItems(db: Database, now: number, deptIds?: string[]): A
         kind: "paused_long",
         severity: "warning",
         title: t.title,
-        detail: `Paused for ${fmtDuration(paused * 60)} by ${name(t.assigned_to)} (${dept(t.department_id)}).`,
+        detail: tr("Paused for {time} by {name} ({dept}).", {
+          time: fmtDuration(paused * 60),
+          name: name(t.assigned_to),
+          dept: dept(t.department_id),
+        }),
         task_id: t.id,
         department_id: t.department_id,
       });
@@ -485,7 +509,7 @@ export function attentionItems(db: Database, now: number, deptIds?: string[]): A
       kind: "unresolved",
       severity: "warning",
       title: u.name,
-      detail: `${count} overdue tasks and no task running right now.`,
+      detail: tr("{n} overdue tasks and no task running right now.", { n: count }),
       user_id: userId,
       department_id: u.department_id ?? undefined,
     });
@@ -498,7 +522,7 @@ export function attentionItems(db: Database, now: number, deptIds?: string[]): A
       kind: "bottleneck",
       severity: count >= 5 ? "critical" : "warning",
       title: dept(deptId),
-      detail: `${count} overdue tasks, ${share}% of this department's open work.`,
+      detail: tr("{n} overdue tasks, {share}% of this department's open work.", { n: count, share }),
       department_id: deptId,
     });
   }
@@ -576,67 +600,72 @@ function describe(db: Database, log: TaskActivityLog): FeedEntry {
   const i = idx(db);
   const task = log.task_id ? (i.taskById.get(log.task_id) ?? null) : null;
   const actor = i.userById.get(log.actor_id) ?? null;
-  const title = task ? `“${task.title}”` : "a task";
-  const who = (id: string | null) => (id ? (i.userById.get(id)?.name ?? "someone") : "no one");
-  const label = (p: string | null) => PRIORITY_LABEL[p as keyof typeof PRIORITY_LABEL] ?? p ?? "";
+  const title = task ? `“${task.title}”` : tr("a task");
+  const who = (id: string | null) => (id ? (i.userById.get(id)?.name ?? tr("someone")) : tr("no one"));
+  const label = (p: string | null) => {
+    const l = PRIORITY_LABEL[p as keyof typeof PRIORITY_LABEL];
+    return l ? tr(l) : (p ?? "");
+  };
   let text = "";
   let tone: FeedEntry["tone"] = "muted";
   switch (log.action) {
     case "assigned":
-      text = log.new_value ? `assigned ${title} to ${who(log.new_value)}` : `created ${title} without an assignee`;
+      text = log.new_value
+        ? tr("assigned {title} to {name}", { title, name: who(log.new_value) })
+        : tr("created {title} without an assignee", { title });
       tone = "info";
       break;
     case "started":
-      text = `started ${title}`;
+      text = tr("started {title}", { title });
       tone = "brand";
       break;
     case "resumed":
-      text = `resumed ${title}`;
+      text = tr("resumed {title}", { title });
       tone = "brand";
       break;
     case "paused":
-      text = `paused ${title}`;
+      text = tr("paused {title}", { title });
       tone = "warn";
       break;
     case "completed":
-      text = `completed ${title}`;
+      text = tr("completed {title}", { title });
       tone = "brand";
       break;
     case "reopened":
-      text = `reopened ${title}`;
+      text = tr("reopened {title}", { title });
       tone = "warn";
       break;
     case "reassigned":
-      text = `reassigned ${title} from ${who(log.previous_value)} to ${who(log.new_value)}`;
+      text = tr("reassigned {title} from {from} to {to}", { title, from: who(log.previous_value), to: who(log.new_value) });
       tone = "info";
       break;
     case "priority_changed":
-      text = `changed ${title} from ${label(log.previous_value)} to ${label(log.new_value)}`;
+      text = tr("changed {title} from {from} to {to}", { title, from: label(log.previous_value), to: label(log.new_value) });
       tone = "info";
       break;
     case "edited":
-      text = `updated ${title}`;
+      text = tr("updated {title}", { title });
       break;
     case "overdue":
-      text = `${title} became overdue`;
+      text = tr("{title} became overdue", { title });
       tone = "crit";
       break;
     case "over_time":
-      text = `went over the ${log.new_value} min allowed on ${title}`;
+      text = tr("went over the {n} min allowed on {title}", { n: log.new_value ?? "", title });
       tone = "crit";
       break;
     case "removed":
-      text = `removed ${title}`;
+      text = tr("removed {title}", { title });
       break;
     case "escalated":
-      text = `escalated ${title} to the Operations Manager`;
+      text = tr("escalated {title} to the Operations Manager", { title });
       tone = "crit";
       break;
     case "report_submitted":
       text =
         log.new_value === "executive"
-          ? "submitted the consolidated daily venue report"
-          : `submitted the ${i.deptById.get(log.new_value ?? "")?.name ?? "department"} daily report`;
+          ? tr("submitted the consolidated daily venue report")
+          : tr("submitted the {dept} daily report", { dept: tr(i.deptById.get(log.new_value ?? "")?.name ?? "department") });
       tone = "info";
       break;
   }
@@ -690,7 +719,10 @@ export function notificationsFor(db: Database, viewer: User, now: number): Atten
         kind: "over_time",
         severity: "warning",
         title: t.title,
-        detail: `You are ${fmtDuration(over)} over the ${fmtDuration(t.estimated_duration * 60)} allowed.`,
+        detail: tr("You are {over} over the {allowed} allowed.", {
+          over: fmtDuration(over),
+          allowed: fmtDuration(t.estimated_duration * 60),
+        }),
         task_id: t.id,
       });
     }
@@ -700,7 +732,7 @@ export function notificationsFor(db: Database, viewer: User, now: number): Atten
         kind: "overdue",
         severity: t.priority === "critical" ? "critical" : "warning",
         title: t.title,
-        detail: `Overdue by ${fmtDuration((now - ms(t.due_at)) / 1000)}.`,
+        detail: tr("Overdue by {time}.", { time: fmtDuration((now - ms(t.due_at)) / 1000) }),
         task_id: t.id,
       });
     } else if (t.status === "pending" && now - ms(t.created_at) < 60 * MIN) {
@@ -709,7 +741,7 @@ export function notificationsFor(db: Database, viewer: User, now: number): Atten
         kind: "new_task",
         severity: "warning",
         title: t.title,
-        detail: `New task from ${i.userById.get(t.assigned_by)?.name ?? "your manager"}.`,
+        detail: tr("New task from {name}.", { name: i.userById.get(t.assigned_by)?.name ?? tr("your manager") }),
         task_id: t.id,
       });
     }

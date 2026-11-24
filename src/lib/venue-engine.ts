@@ -314,7 +314,7 @@ export function createEvent(db: Database, actor: User, now: number, input: Event
   const users = idx(db).userById;
   const tasks: Task[] = prep.map((p) => {
     const to = users.get(p.assigned_to);
-    if (!to || (to.id !== actor.id && !isBeneath(actor, to))) fail(`You cannot assign “${p.title}” to that person.`);
+    if (!to || (to.id !== actor.id && !isBeneath(actor, to))) fail("You cannot assign one of the event tasks to that person.");
     return {
       id: uid("t"),
       title: p.title.trim(),

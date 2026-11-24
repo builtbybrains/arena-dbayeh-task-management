@@ -158,11 +158,18 @@ export function dueReminders(db: Database, user: User, now: number): ReminderIte
   const out: ReminderItem[] = remindersFor(db, user)
     .filter((r) => ms(r.at) <= now)
     .map((r) => ({ id: r.id, title: r.title, note: r.note, at: ms(r.at), kind: r.event_id ? "event" : "reminder", reminder: r, event_id: r.event_id }));
-  for (const t of idx(db).live) {
-    if (t.assigned_to !== user.id || t.status !== "pending" || isOverdue(t, now)) continue;
-    const due = ms(t.due_at);
+  for (const task of idx(db).live) {
+    if (task.assigned_to !== user.id || task.status !== "pending" || isOverdue(task, now)) continue;
+    const due = ms(task.due_at);
     if (due - now <= 30 * 60_000) {
-      out.push({ id: `due_${t.id}`, title: `Due soon: ${t.title}`, note: "Not started yet.", at: due - 30 * 60_000, kind: "task_due", task_id: t.id });
+      out.push({
+        id: `due_${task.id}`,
+        title: t("Due soon: {title}", { title: task.title }),
+        note: t("Not started yet."),
+        at: due - 30 * 60_000,
+        kind: "task_due",
+        task_id: task.id,
+      });
     }
   }
   return out.sort((a, b) => b.at - a.at);
