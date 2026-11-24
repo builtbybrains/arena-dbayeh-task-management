@@ -155,7 +155,7 @@ function SamplePicker() {
                   <p className="display text-xl">{t(p.label)}</p>
                   <p className="truncate text-xs text-paper/55">{u.name}</p>
                 </div>
-                <ArrowRight className="size-4 shrink-0 text-paper/30 transition group-hover:translate-x-1 group-hover:text-brand rtl:rotate-180" />
+                <ArrowRight className="size-4 shrink-0 text-paper/30 transition group-hover:translate-x-1 group-hover:text-brand rtl:rotate-180 rtl:group-hover:-translate-x-1" />
               </div>
               <ul className="mt-3 space-y-1.5">
                 {ROLE_PERMISSIONS[u.role].map((perm) => (

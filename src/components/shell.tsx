@@ -139,10 +139,10 @@ function Dock({ items, pathname, me }: { items: NavItem[]; pathname: string; me:
     "relative whitespace-nowrap opacity-0 transition-opacity duration-200 group-hover/dock:opacity-100 group-focus-within/dock:opacity-100";
   return (
     <nav
-      aria-label="Main"
+      aria-label={t("Main")}
       className="no-print group/dock glass fixed top-1/2 start-4 z-40 hidden w-[60px] -translate-y-1/2 flex-col gap-1 overflow-hidden rounded-[28px] p-2 transition-[width] duration-300 ease-out focus-within:w-60 hover:w-60 md:flex"
     >
-      <Link href={homeFor(me.role)} className="mb-2 flex h-11 items-center gap-3 ps-0.5" aria-label="Arena OS home">
+      <Link href={homeFor(me.role)} className="mb-2 flex h-11 items-center gap-3 ps-0.5" aria-label={t("Arena OS home")}>
         <ArenaMark className="h-[18px] w-[44px] shrink-0 text-paper" />
         <span className={cn(label, "display text-base")}>
           Arena <span className="text-brand">OS</span>
@@ -193,7 +193,7 @@ function MobileDock({ items, pathname }: { items: NavItem[]; pathname: string })
   const cell = "relative flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-2xl py-2 text-[10px] font-semibold";
   return (
     <>
-      <nav aria-label="Main" className="no-print glass-solid fixed inset-x-3 bottom-3 z-40 flex items-stretch rounded-3xl p-1.5 md:hidden">
+      <nav aria-label={t("Main")} className="no-print glass-solid fixed inset-x-3 bottom-3 z-40 flex items-stretch rounded-3xl p-1.5 md:hidden">
         {main.map((item) => {
           const Icon = ICONS[item.icon];
           const on = isActive(pathname, item.href);

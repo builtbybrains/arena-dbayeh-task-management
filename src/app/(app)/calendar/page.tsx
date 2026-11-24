@@ -365,7 +365,7 @@ function RemindersTab() {
                         const n = i.userById.get(id)?.name ?? "";
                         return r.done_by.includes(id) ? `${n} ✓` : n;
                       })
-                      .join(", ")}
+                      .join(t(", "))}
                   </p>
                 </div>
                 <Btn size="sm" variant="subtle" onClick={() => actions.deleteReminder(r.id)} aria-label={t("Delete")}>
@@ -393,7 +393,7 @@ function RecurringTab({ onEdit }: { onEdit: (r: RecurringTask | null) => void })
     r.repeat === "daily"
       ? t("Every day at {time}", { time: r.due_time })
       : r.repeat === "weekly"
-        ? t("Every {days} at {time}", { days: r.weekdays.map((d) => t(WEEKDAYS[d])).join(", "), time: r.due_time })
+        ? t("Every {days} at {time}", { days: r.weekdays.map((d) => t(WEEKDAYS[d])).join(t(", ")), time: r.due_time })
         : t("Day {d} of each month at {time}", { d: r.month_day, time: r.due_time });
   return (
     <Panel
