@@ -11,6 +11,7 @@ export interface ComposerPreset {
 /** Quick status filter on the task board. */
 export type BoardQuick =
   | "open"
+  | "mine"
   | "overdue"
   | "over_time"
   | "in_progress"
@@ -36,10 +37,12 @@ interface UiState {
   walkIn: boolean;
   composer: ComposerPreset | null;
   board: BoardFilters;
+  /** Tab the calendar opens on next (e.g. Recurring tasks, from the task board). */
+  calendarTab: "recurring" | null;
 }
 
 /** Transient interface state shared across screens (never persisted). */
-export const useUi = create<UiState>(() => ({ demoOpen: false, walkIn: false, composer: null, board: NO_FILTERS }));
+export const useUi = create<UiState>(() => ({ demoOpen: false, walkIn: false, composer: null, board: NO_FILTERS, calendarTab: null }));
 
 export const openDemo = () => useUi.setState({ demoOpen: true });
 export const closeDemo = () => useUi.setState({ demoOpen: false });

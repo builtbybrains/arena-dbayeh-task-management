@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 
 const QUICK: { value: BoardQuick; label: string; tone?: "crit" | "warn" }[] = [
   { value: "open", label: "All open" },
+  { value: "mine", label: "Assigned to me" },
   { value: "overdue", label: "Overdue", tone: "crit" },
   { value: "over_time", label: "Over time allowed", tone: "warn" },
   { value: "in_progress", label: "In progress" },
@@ -31,11 +32,13 @@ const EMPTY_LANE: Record<Priority, string> = {
   low: "No low priority tasks",
 };
 
-function matchesQuick(q: BoardQuick, t: Task, db: Database, now: number): boolean {
+function matchesQuick(q: BoardQuick, t: Task, db: Database, now: number, meId: string): boolean {
   const open = t.status !== "completed";
   switch (q) {
     case "open":
       return open;
+    case "mine":
+      return open && t.assigned_to === meId;
     case "overdue":
       return isOverdue(t, now);
     case "over_time":
@@ -96,11 +99,11 @@ export function TaskBoard() {
       return `${t.title} ${who?.name ?? "unassigned"} ${t.category ?? ""}`.toLowerCase().includes(needle);
     });
     const counts = Object.fromEntries(
-      QUICK.map((q) => [q.value, base.filter((t) => matchesQuick(q.value, t, db, now)).length]),
+      QUICK.map((q) => [q.value, base.filter((t) => matchesQuick(q.value, t, db, now, me.id)).length]),
     ) as Record<BoardQuick, number>;
-    const shown = base.filter((t) => matchesQuick(f.quick, t, db, now));
+    const shown = base.filter((t) => matchesQuick(f.quick, t, db, now, me.id));
     return { lanes: PRIORITIES.map((p) => sortTasks(shown.filter((t) => t.priority === p))), counts };
-  }, [all, db, now, f]);
+  }, [all, db, now, f, me.id]);
 
   const total = lanes.reduce((n, l) => n + l.length, 0);
   const filtered = f.assignee || f.dept || f.priority || f.restaurant || f.q || f.quick !== NO_FILTERS.quick;
@@ -111,6 +114,8 @@ export function TaskBoard() {
         {QUICK.map((q) => {
           const on = f.quick === q.value;
           const n = counts[q.value];
+          // "Assigned to me" only when someone gave this person work.
+          if (q.value === "mine" && n === 0 && !on) return null;
           return (
             <Chip
               key={q.value}

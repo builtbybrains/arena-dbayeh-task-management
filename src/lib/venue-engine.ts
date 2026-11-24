@@ -10,8 +10,9 @@ import {
   canManageEvents,
   canManagePeople,
   canManagePerson,
+  canAssign,
   canManageRecurring,
-  isBeneath,
+  canDirect,
   remindableUsers,
 } from "./permissions";
 import { MAX_OWNERS } from "./business";
@@ -325,7 +326,7 @@ export function createEvent(db: Database, actor: User, now: number, input: Event
   const users = idx(db).userById;
   const tasks: Task[] = prep.map((p) => {
     const to = users.get(p.assigned_to);
-    if (!to || (to.id !== actor.id && !isBeneath(actor, to))) fail("You cannot assign one of the event tasks to that person.");
+    if (!to || (to.id !== actor.id && !canDirect(actor, to))) fail("You cannot assign one of the event tasks to that person.");
     return {
       id: uid("t"),
       title: p.title.trim(),
@@ -498,16 +499,24 @@ export interface RecurringInput {
   repeat: Repeat;
   weekdays: number[];
   month_day: number;
+  dates?: string[];
   due_time: string;
   estimated_duration: number;
 }
+
+const MAX_CUSTOM_DATES = 400;
 
 export function saveRecurring(db: Database, actor: User, now: number, input: RecurringInput, id?: string): Database {
   if (!canManageRecurring(actor)) fail("Only managers can set up recurring tasks.");
   if (input.title.trim().length < 3) fail("Give the task a title.");
   const to = idx(db).userById.get(input.assigned_to);
-  if (!to || !isBeneath(actor, to)) fail("Choose someone on your team.");
+  if (!to || !canDirect(actor, to)) fail("Choose someone on your team.");
+  if (!idx(db).deptById.has(input.department_id) || !canAssign(db, actor, input.assigned_to, input.department_id))
+    fail("Choose a department.");
   if (input.repeat === "weekly" && input.weekdays.length === 0) fail("Pick at least one day of the week.");
+  const dates = input.repeat === "custom" ? [...new Set((input.dates ?? []).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)))].sort() : [];
+  if (input.repeat === "custom" && dates.length === 0) fail("Pick at least one date.");
+  if (dates.length > MAX_CUSTOM_DATES) fail("Pick fewer dates.");
   if (!/^\d{2}:\d{2}$/.test(input.due_time)) fail("Set the time it is due.");
   if (!input.estimated_duration || input.estimated_duration <= 0) fail("Set the time allowed.");
   const fields = {
@@ -519,6 +528,7 @@ export function saveRecurring(db: Database, actor: User, now: number, input: Rec
     repeat: input.repeat,
     weekdays: [...new Set(input.weekdays)].sort(),
     month_day: Math.min(28, Math.max(1, Math.round(input.month_day) || 1)),
+    dates,
     due_time: input.due_time,
     estimated_duration: Math.round(input.estimated_duration),
   };
@@ -545,6 +555,7 @@ export const weekdayOf = (key: string) => new Date(`${key}T12:00:00Z`).getUTCDay
 
 export function recursOn(rule: RecurringTask, key: string): boolean {
   if (rule.repeat === "daily") return true;
+  if (rule.repeat === "custom") return !!rule.dates?.includes(key);
   if (rule.repeat === "weekly") return rule.weekdays.includes(weekdayOf(key));
   return Number(key.slice(8, 10)) === rule.month_day;
 }
@@ -597,6 +608,7 @@ export function generateRecurring(db: Database, now: number): Database {
 
 /** Next dates a schedule fires, for the schedule list. */
 export function nextRuns(rule: RecurringTask, fromKey: string, n = 3): string[] {
+  if (rule.repeat === "custom") return (rule.dates ?? []).filter((d) => d >= fromKey).slice(0, n);
   const out: string[] = [];
   for (let d = 0; d < 62 && out.length < n; d++) {
     const k = addDays(fromKey, d);

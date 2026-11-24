@@ -17,10 +17,14 @@ export const isExec = (u: User) => u.role === "owner";
 export const isCompanyWide = (u: User) => u.role === "owner" || u.role === "ops";
 
 /**
- * Chain of command: Owner > Operations Manager > Department Manager (Restaurant,
- * Playground) > Staff. A department manager's chain is their own department.
+ * Whether `actor` may give work to `target` (assign, reassign, pass on, set a
+ * reminder or a recurring task). Chain of command: Owners > Operations Manager
+ * > Department Manager (Restaurant, Playground) > Staff; a department
+ * manager's chain is their own department. The owners are equals and can also
+ * give work to each other.
  */
-export function isBeneath(actor: User, target: User): boolean {
+export function canDirect(actor: User, target: User): boolean {
+  if (actor.role === "owner" && target.role === "owner") return actor.id !== target.id;
   if (ROLE_RANK[target.role] <= ROLE_RANK[actor.role]) return false;
   return actor.role !== "manager" || inDept(target, actor.department_id);
 }
@@ -64,7 +68,7 @@ export function assignableDepartmentIds(db: Database, actor: User): string[] {
 export function assignableUsers(db: Database, actor: User, deptId: string): User[] {
   if (actor.role === "manager" && actor.department_id !== deptId) return [];
   return db.users.filter(
-    (u) => u.active_status && isBeneath(actor, u) && (inDept(u, deptId) || u.department_id === null),
+    (u) => u.active_status && canDirect(actor, u) && (inDept(u, deptId) || u.department_id === null),
   );
 }
 
@@ -82,7 +86,7 @@ export function canManageTask(db: Database, actor: User, t: Task): boolean {
   if (actor.role === "manager" && t.department_id !== actor.department_id) return false;
   if (!t.assigned_to) return true;
   const assignee = db.users.find((u) => u.id === t.assigned_to);
-  return assignee ? isBeneath(actor, assignee) : true;
+  return assignee ? canDirect(actor, assignee) : true;
 }
 
 /**
@@ -94,7 +98,7 @@ export const canDelegate = (actor: User, t: Task) =>
 
 /** Who a task can be passed on to: anyone beneath the person holding it. */
 export function delegateTargets(db: Database, actor: User): User[] {
-  return db.users.filter((u) => u.active_status && isBeneath(actor, u));
+  return db.users.filter((u) => u.active_status && canDirect(actor, u));
 }
 
 export const canRunTimer = (actor: User, t: Task) => !t.deleted_at && t.assigned_to === actor.id;
@@ -187,7 +191,7 @@ export const canEraseWorkspace = (actor: User) => actor.role === "owner";
 
 /** People a reminder can be sent to: yourself and anyone beneath you. */
 export function remindableUsers(db: Database, actor: User): User[] {
-  return db.users.filter((u) => u.active_status && (u.id === actor.id || isBeneath(actor, u)));
+  return db.users.filter((u) => u.active_status && (u.id === actor.id || canDirect(actor, u)));
 }
 
 export interface NavItem {

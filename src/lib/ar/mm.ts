@@ -182,4 +182,21 @@ export const MM: Record<string, string> = {
   "You cannot take money from this counter.": "لا يمكنك أخذ المال من هذا الصندوق.",
   "This expense no longer exists.": "هذا المصروف لم يعد موجودًا.",
   "You cannot remove this expense.": "لا يمكنك حذف هذا المصروف.",
+
+  // --- Owners giving each other work, recurring tasks on chosen dates ---------------------
+  "Assigned to me": "مُسندة إليّ",
+  "1 task assigned to you": "مهمة واحدة مُسندة إليك",
+  "{n} tasks assigned to you": "{n} مهام مُسندة إليك",
+  "Open": "فتح",
+  "Custom dates": "تواريخ مخصّصة",
+  "Tap the days the task should happen.": "اضغط على الأيام التي يجب أن تتم فيها المهمة.",
+  "1 date": "تاريخ واحد",
+  "{n} dates": "{n} تواريخ",
+  "Remove {date}": "إزالة {date}",
+  "{n} chosen dates at {time}": "{n} تواريخ مختارة الساعة {time}",
+  "No dates left. Edit it to add more.": "لم تبقَ تواريخ. عدّلها لإضافة المزيد.",
+  "For work that repeats every day, week or month, or on dates you pick: opening checks, deep cleans, stock counts.":
+    "للأعمال التي تتكرر يوميًا أو أسبوعيًا أو شهريًا، أو في تواريخ تختارها: فحص الافتتاح، التنظيف العميق، جرد المخزون.",
+  "Pick at least one date.": "اختر تاريخًا واحدًا على الأقل.",
+  "Pick fewer dates.": "اختر تواريخ أقل.",
 };

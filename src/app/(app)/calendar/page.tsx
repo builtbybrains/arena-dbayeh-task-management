@@ -27,6 +27,7 @@ import { actions, useDb, useMe, useNow } from "@/lib/store";
 import { addDays, dateKey, fmtDay, fmtKeyLong, fmtMonth, fmtTime, ms } from "@/lib/time";
 import { AREA_LABEL, EVENT_KIND_COLOR, EVENT_KIND_LABEL, type RecurringTask, type VenueEvent } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useUi } from "@/lib/ui";
 import { BUSY_COLOR, BUSY_LABEL, dayLoads, fmtParty, remindersFor, type DayLoad } from "@/lib/venue";
 import { nextRuns } from "@/lib/venue-engine";
 
@@ -40,7 +41,12 @@ export default function CalendarPage() {
   const me = useMe();
   const now = useNow();
   const today = dateKey(now);
-  const [tab, setTab] = useState<Tab>("month");
+  // Opened from the task board's "Recurring tasks" button: start on that tab.
+  const [tab, setTab] = useState<Tab>(() => {
+    const want = useUi.getState().calendarTab;
+    if (want) useUi.setState({ calendarTab: null });
+    return want && canManageRecurring(me) ? want : "month";
+  });
   const [selected, setSelected] = useState(today);
   const [month, setMonth] = useState(today.slice(0, 7));
   const [modal, setModal] = useState<Modal>(null);
@@ -394,7 +400,9 @@ function RecurringTab({ onEdit }: { onEdit: (r: RecurringTask | null) => void })
       ? t("Every day at {time}", { time: r.due_time })
       : r.repeat === "weekly"
         ? t("Every {days} at {time}", { days: r.weekdays.map((d) => t(WEEKDAYS[d])).join(t(", ")), time: r.due_time })
-        : t("Day {d} of each month at {time}", { d: r.month_day, time: r.due_time });
+        : r.repeat === "custom"
+          ? t("{n} chosen dates at {time}", { n: r.dates?.length ?? 0, time: r.due_time })
+          : t("Day {d} of each month at {time}", { d: r.month_day, time: r.due_time });
   return (
     <Panel
       title={t("Recurring tasks")}
@@ -406,7 +414,7 @@ function RecurringTab({ onEdit }: { onEdit: (r: RecurringTask | null) => void })
       }
     >
       {rules.length === 0 ? (
-        <Empty icon={<ClipboardList className="size-6" />} title={t("No recurring tasks yet")} hint={t("For checklists that happen every day or every week: opening checks, deep cleans, stock counts.")} />
+        <Empty icon={<ClipboardList className="size-6" />} title={t("No recurring tasks yet")} hint={t("For work that repeats every day, week or month, or on dates you pick: opening checks, deep cleans, stock counts.")} />
       ) : (
         <ul className="grid gap-2 md:grid-cols-2">
           {rules.map((r) => {
@@ -421,7 +429,11 @@ function RecurringTab({ onEdit }: { onEdit: (r: RecurringTask | null) => void })
                       {to?.name} · {describe(r)}
                     </p>
                     <p className="tnum mt-1 text-[11px] text-paper/45">
-                      {r.active ? t("Next: {dates}", { dates: nextRuns(r, today).map((k) => fmtDay(`${k}T12:00:00Z`)).join(" · ") }) : t("Paused")}
+                      {!r.active
+                        ? t("Paused")
+                        : nextRuns(r, today).length
+                          ? t("Next: {dates}", { dates: nextRuns(r, today).map((k) => fmtDay(`${k}T12:00:00Z`)).join(" · ") })
+                          : t("No dates left. Edit it to add more.")}
                     </p>
                   </div>
                 </div>

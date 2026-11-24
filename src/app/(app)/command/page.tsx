@@ -21,7 +21,7 @@ import { DepartmentSheet } from "@/components/department";
 import { Btn, Chip, PageHeader, Panel, Stat } from "@/components/kit";
 import { t } from "@/lib/i18n";
 import { canCreateTasks } from "@/lib/permissions";
-import { companyKpis, departmentNodes, HEALTH_COLOR, healthOf } from "@/lib/selectors";
+import { companyKpis, departmentNodes, HEALTH_COLOR, healthOf, idx } from "@/lib/selectors";
 import { useDb, useMe, useNow } from "@/lib/store";
 import { fmtDuration, greeting } from "@/lib/time";
 import { openComposer, showOnBoard } from "@/lib/ui";
@@ -35,6 +35,8 @@ export default function CommandCenterPage() {
   const nodes = useMemo(() => departmentNodes(db, now), [db, now]);
   const [dept, setDept] = useState<string | null>(null);
   const router = useRouter();
+  // Work another owner (or anyone above) gave this person.
+  const mine = useMemo(() => idx(db).live.filter((x) => x.assigned_to === me.id && x.status !== "completed"), [db, me.id]);
 
   return (
     <>
@@ -49,6 +51,23 @@ export default function CommandCenterPage() {
           </Btn>
         )}
       </PageHeader>
+      {mine.length > 0 && (
+        <button
+          type="button"
+          onClick={() => {
+            showOnBoard({ quick: "mine" });
+            router.push("/tasks");
+          }}
+          className="mb-4 flex w-full items-center gap-3 rounded-2xl border border-med/40 bg-med/8 p-3.5 text-start transition hover:bg-med/12"
+        >
+          <ListChecks className="size-5 shrink-0 text-med" />
+          <span className="min-w-0 flex-1">
+            <span className="block font-semibold">{mine.length === 1 ? t("1 task assigned to you") : t("{n} tasks assigned to you", { n: mine.length })}</span>
+            <span className="block truncate text-xs text-paper/60">{mine.slice(0, 3).map((x) => x.title).join(" · ")}</span>
+          </span>
+          <span className="text-sm font-semibold text-med">{t("Open")}</span>
+        </button>
+      )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat

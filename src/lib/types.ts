@@ -265,7 +265,8 @@ export interface Reminder {
   deleted_at: string | null;
 }
 
-export type Repeat = "daily" | "weekly" | "monthly";
+/** Every day, chosen weekdays, one day of the month, or a list of chosen dates. */
+export type Repeat = "daily" | "weekly" | "monthly" | "custom";
 
 /** A task that creates itself on a schedule (e.g. the daily opening checklist). */
 export interface RecurringTask {
@@ -278,6 +279,7 @@ export interface RecurringTask {
   repeat: Repeat;
   weekdays: number[]; // 0 = Sunday … 6 = Saturday, for weekly
   month_day: number; // 1-28, for monthly
+  dates?: string[]; // Beirut business dates (YYYY-MM-DD), for custom
   due_time: string; // "HH:MM" Beirut
   estimated_duration: number; // minutes
   active: boolean;

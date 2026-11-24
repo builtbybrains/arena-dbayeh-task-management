@@ -17,7 +17,7 @@ Language: English or Arabic (right-to-left) from the **ع / EN** button, per pho
 
 | Position | Sees | Can do |
 | --- | --- | --- |
-| **Owners** (up to 4, all equal) | Everything in Arena and Money Mondo, including revenue and money | Assign to the Operations Manager / Mall Manager (the default) or anyone directly · add people (and other owners) and set PINs · book events · all reports · erase the workspace |
+| **Owners** (up to 4, all equal) | Everything in Arena and Money Mondo, including revenue and money | Assign to the Operations Manager / Mall Manager (the default), each other, or anyone directly · add people (and other owners) and set PINs · book events · all reports · erase the workspace |
 | **Operations Manager** | The whole venue, including revenue. Nothing of Money Mondo | Pass tasks to managers and staff · add people below them (staff and department managers) · book events · recurring tasks · submits the daily venue report |
 | **Restaurant / Playground Manager** | Their department | Assign tasks to their team · book events · enter restaurant sales · recurring tasks · submits the daily department report |
 | **Staff** (waiters, cooks, attendants, cashier, maintenance…) | Their own tasks, the calendar | Start / pause / complete tasks · log walk-ins · set reminders for themselves |
@@ -54,7 +54,8 @@ How it is built: `src/lib/business.ts` gives every screen a *view* of the data f
 - **Events**: birthday, private party, school trip, corporate, tournament. Each has a date and time, area, kids and adults, client contact, package price and deposit, and a person in charge. When booking, tick the prep / setup / cleanup tasks and who does them; they are assigned automatically with their deadlines. The person in charge and the Operations Manager get a reminder the day before and an hour before. Cancelling an event removes its reminders and unstarted prep tasks.
 - **Walk-ins**: the green **Walk-in** button on every screen. Enter kids and adults, the area and the amount paid (filled in from the entry prices), then save. The Walk-ins screen shows the day by hour, the log, and lets managers type in restaurant sales and other income.
 - **Reminders**: set for yourself or anyone below you. They pop up in the app at that time, stay in the bell until ticked off, and show as phone notifications if they were turned on (Account menu → Phone notifications; the app must be open in a tab).
-- **Recurring tasks**: daily, weekly (chosen days) or monthly. Each one creates its task in the person's queue on the right day.
+- **Recurring tasks** (Tasks → Recurring tasks, or Calendar → Recurring tasks): every day, every week (chosen days), every month (a day of the month) or **custom dates** picked on a calendar. Each one creates its task in the person's queue on the right day.
+- **Owners give each other work**: an owner can assign, pass on or schedule a task for another owner. Anyone who received a task sees "N tasks assigned to you" on the Command Center and an **Assigned to me** filter on the task board.
 - **Reports by date**: today, yesterday, this week, last 7 days, this month, last month or any range. Includes tasks per person, events, walk-ins (busiest day and hour, by area) and revenue (door + event packages + restaurant + other). Export to CSV or print / PDF. The original task reports and the daily submission chain (manager → Operations Manager → Owner) are under **Task reports**.
 
 ## First day with the real workspace

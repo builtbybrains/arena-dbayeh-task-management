@@ -10,7 +10,7 @@ import {
   canRunTimer,
   canSubmitDepartmentReport,
   canSubmitExecutiveReport,
-  isBeneath,
+  canDirect,
 } from "./permissions";
 import { departmentSnapshot, elapsedSeconds, executiveSnapshot, idx } from "./selectors";
 import { iso, ms } from "./time";
@@ -219,7 +219,7 @@ export function delegateTask(db: Database, actor: User, now: number, taskId: str
   const task = getTask(db, taskId);
   if (!canDelegate(actor, task)) fail("Only the person holding this task can pass it on.");
   const target = db.users.find((u) => u.id === userId && u.active_status);
-  if (!target || !isBeneath(actor, target)) fail("You can only pass a task to someone on your team.");
+  if (!target || !canDirect(actor, target)) fail("You can only pass a task to someone on your team.");
   return {
     ...db,
     tasks: patch(
