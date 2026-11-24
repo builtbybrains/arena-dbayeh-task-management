@@ -28,6 +28,7 @@ import {
   Segmented,
 } from "@/components/kit";
 import { TaskCard, useStartTask } from "@/components/task-card";
+import { t } from "@/lib/i18n";
 import { ROLE_PERMISSIONS } from "@/lib/permissions";
 import {
   dailyTrend,
@@ -122,10 +123,10 @@ export function MyDay() {
           <>
             <p className="eyebrow">{fmtKeyLong(dateKey(now))}</p>
             <h1 className="display mt-2 text-4xl md:text-5xl">
-              {greeting(now)}, {first(me.name)}
+              {t("{greeting}, {name}", { greeting: greeting(now), name: first(me.name) })}
             </h1>
             <p className="mt-2 text-lg text-paper/65">
-              Here&rsquo;s your mission for today.
+              {t("Here’s your mission for today.")}
             </p>
 
             <dl className="mt-6 grid grid-cols-3 gap-2.5">
@@ -151,7 +152,7 @@ export function MyDay() {
                     {v}
                   </dd>
                   <dt className="mt-1.5 text-[10px] font-semibold tracking-[0.12em] text-paper/50 uppercase sm:text-[11px]">
-                    {k}
+                    {t(k)}
                   </dt>
                 </div>
               ))}
@@ -161,12 +162,12 @@ export function MyDay() {
               <button
                 type="button"
                 onClick={() => setBrowsing(false)}
-                className="mt-4 flex w-full items-center gap-3 rounded-2xl border border-brand/50 bg-brand/12 p-3.5 text-left"
+                className="mt-4 flex w-full items-center gap-3 rounded-2xl border border-brand/50 bg-brand/12 p-3.5 text-start"
               >
                 <span className="live-dot size-2.5 shrink-0 rounded-full bg-brand text-brand" />
                 <span className="min-w-0 flex-1">
                   <span className="block text-[10px] font-bold tracking-[0.16em] text-brand uppercase">
-                    Working now
+                    {t("Working now")}
                   </span>
                   <span className="block truncate text-sm font-semibold">
                     {today.current.title}
@@ -178,12 +179,12 @@ export function MyDay() {
               </button>
             )}
 
-            <h2 className="eyebrow mt-8 mb-3">Your priority queue</h2>
+            <h2 className="eyebrow mt-8 mb-3">{t("Your priority queue")}</h2>
             {queue.length === 0 ? (
               <Empty
                 icon={<Check className="size-7" />}
-                title="All done for now"
-                hint="You have no open tasks. New assignments from your manager will appear here."
+                title={t("All done for now")}
+                hint={t("You have no open tasks. New assignments from your manager will appear here.")}
               />
             ) : (
               <>
@@ -194,10 +195,10 @@ export function MyDay() {
                   onOpen={() => setBrowsing(false)}
                 />
                 <ul className="mt-3 space-y-2.5">
-                  {queue.slice(1).map((t) => (
+                  {queue.slice(1).map((q) => (
                     <QueueRow
-                      key={t.id}
-                      task={t}
+                      key={q.id}
+                      task={q}
                       now={now}
                       onStart={begin}
                       onOpen={() => setBrowsing(false)}
@@ -229,8 +230,10 @@ function Meta({ task, now }: { task: Task; now: number }) {
           overdue && "font-semibold text-crit",
         )}
       >
-        <CalendarClock className="size-3.5" /> {overdue ? "Overdue · " : "Due "}
-        {fmtDue(task.due_at, now)}
+        <CalendarClock className="size-3.5" />{" "}
+        {overdue
+          ? t("Overdue · {due}", { due: fmtDue(task.due_at, now) })
+          : t("Due {due}", { due: fmtDue(task.due_at, now) })}
       </span>
       {task.estimated_duration ? (
         <span className="flex items-center gap-1.5">
@@ -240,7 +243,7 @@ function Meta({ task, now }: { task: Task; now: number }) {
       ) : null}
       {tracked > 0 && (
         <span className="tnum font-mono text-warn">
-          {fmtClock(tracked)} tracked
+          {t("{time} tracked", { time: fmtClock(tracked) })}
         </span>
       )}
     </div>
@@ -275,11 +278,11 @@ function HeroTask({
         style={{ background: color }}
       />
       <div className="flex flex-wrap items-center gap-2">
-        <span className="eyebrow">Up next</span>
+        <span className="eyebrow">{t("Up next")}</span>
         <PriorityBadge priority={task.priority} />
         {isNew(task, now) && (
           <span className="rounded-full bg-brand px-2 py-0.5 text-[10px] font-bold tracking-wider text-ink uppercase">
-            New
+            {t("New")}
           </span>
         )}
       </div>
@@ -291,7 +294,9 @@ function HeroTask({
         <Meta task={task} now={now} />
       </div>
       {by && (
-        <p className="mt-2 text-xs text-paper/45">Assigned by {by.name}</p>
+        <p className="mt-2 text-xs text-paper/45">
+          {t("Assigned by {name}", { name: by.name })}
+        </p>
       )}
       <button
         type="button"
@@ -306,10 +311,10 @@ function HeroTask({
         />
         <Play className="size-6 fill-current" />
         {running
-          ? "Open timer"
+          ? t("Open timer")
           : task.status === "paused"
-            ? "Resume task"
-            : "Start task"}
+            ? t("Resume task")
+            : t("Start task")}
       </button>
     </motion.div>
   );
@@ -330,10 +335,10 @@ function QueueRow({
   return (
     <motion.li
       layout
-      className="glass relative flex items-center gap-3 overflow-hidden rounded-2xl p-3.5 pl-5"
+      className="glass relative flex items-center gap-3 overflow-hidden rounded-2xl p-3.5 ps-5"
     >
       <span
-        className="absolute inset-y-0 left-0 w-1"
+        className="absolute inset-y-0 start-0 w-1"
         style={{ background: PRIORITY_COLOR[task.priority] }}
       />
       <div className="min-w-0 flex-1">
@@ -341,12 +346,12 @@ function QueueRow({
           <PriorityBadge priority={task.priority} />
           {isNew(task, now) && (
             <span className="text-[10px] font-bold tracking-wider text-brand uppercase">
-              New
+              {t("New")}
             </span>
           )}
           {task.status === "paused" && (
             <span className="text-[10px] font-bold tracking-wider text-warn uppercase">
-              Paused
+              {t("Paused")}
             </span>
           )}
         </div>
@@ -360,7 +365,13 @@ function QueueRow({
       <button
         type="button"
         onClick={() => (running ? onOpen() : onStart(task.id))}
-        aria-label={`${running ? "Open timer for" : task.status === "paused" ? "Resume" : "Start"} ${task.title}`}
+        aria-label={
+          running
+            ? t("Open timer for {title}", { title: task.title })
+            : task.status === "paused"
+              ? t("Resume {title}", { title: task.title })
+              : t("Start {title}", { title: task.title })
+        }
         className="grid size-14 shrink-0 place-items-center rounded-full border border-brand/50 bg-brand/14 text-brand transition hover:bg-brand hover:text-ink active:scale-95"
       >
         <Play className="size-5 fill-current" />
@@ -390,7 +401,7 @@ function FocusMode({
     <div className="flex flex-col items-center text-center">
       <p className="eyebrow flex items-center gap-2.5">
         <span className="live-dot size-2 rounded-full bg-brand text-brand" />{" "}
-        Working now
+        {t("Working now")}
       </p>
       <h1 className="display mt-3 text-4xl text-balance md:text-5xl">
         {task.title}
@@ -403,7 +414,7 @@ function FocusMode({
             isOverdue(task, now) ? "font-semibold text-crit" : "text-paper/55",
           )}
         >
-          Due {fmtDue(task.due_at, now)}
+          {t("Due {due}", { due: fmtDue(task.due_at, now) })}
         </span>
       </div>
 
@@ -412,7 +423,8 @@ function FocusMode({
           role="alert"
           className="mt-5 flex items-center gap-2 rounded-full border border-warn/45 bg-warn/12 px-4 py-2 text-sm font-semibold text-warn"
         >
-          <AlarmClock className="size-4 shrink-0" /> Over the time allowed. Your manager has been alerted.
+          <AlarmClock className="size-4 shrink-0" />{" "}
+          {t("Over the time allowed. Your manager has been alerted.")}
         </p>
       )}
 
@@ -435,18 +447,21 @@ function FocusMode({
             </p>
             <p className="mt-3 text-sm text-paper/55">
               {est === 0
-                ? "active time"
+                ? t("active time")
                 : over
-                  ? `${fmtDuration(elapsed - est)} over the ${fmtDuration(est)} allowed`
-                  : `of ${fmtDuration(est)} allowed`}
+                  ? t("{over} over the {allowed} allowed", {
+                      over: fmtDuration(elapsed - est),
+                      allowed: fmtDuration(est),
+                    })
+                  : t("of {allowed} allowed", { allowed: fmtDuration(est) })}
             </p>
           </div>
         </Ring>
       </div>
 
-      <div className="glass mt-8 w-full rounded-2xl p-4 text-left">
+      <div className="glass mt-8 w-full rounded-2xl p-4 text-start">
         <p className="text-[10px] font-semibold tracking-[0.16em] text-paper/45 uppercase">
-          Instructions
+          {t("Instructions")}
         </p>
         <p className="mt-1.5 text-sm leading-relaxed text-paper/80">
           {task.description}
@@ -459,14 +474,14 @@ function FocusMode({
           onClick={() => actions.pauseTask(task.id)}
           className="glass flex h-16 items-center justify-center gap-2.5 rounded-2xl text-lg font-semibold transition active:scale-[0.97]"
         >
-          <Pause className="size-5 fill-current" /> Pause
+          <Pause className="size-5 fill-current" /> {t("Pause")}
         </button>
         <button
           type="button"
           onClick={() => onDone(task.id)}
           className="flex h-16 items-center justify-center gap-2.5 rounded-2xl bg-brand text-lg font-bold text-ink shadow-[0_18px_50px_-16px_rgb(34_199_63/85%)] transition active:scale-[0.97]"
         >
-          <Check className="size-6" /> Done
+          <Check className="size-6" /> {t("Done")}
         </button>
       </div>
       <button
@@ -474,7 +489,7 @@ function FocusMode({
         onClick={onBrowse}
         className="mt-5 text-sm text-paper/50 underline-offset-4 hover:text-paper hover:underline"
       >
-        See my other tasks
+        {t("See my other tasks")}
       </button>
     </div>
   );
@@ -553,19 +568,20 @@ function DoneScreen({
           </svg>
         </motion.div>
       </div>
-      <p className="eyebrow mt-8">Task complete</p>
-      <h1 className="display mt-2 text-4xl">Nice work</h1>
+      <p className="eyebrow mt-8">{t("Task complete")}</p>
+      <h1 className="display mt-2 text-4xl">{t("Nice work")}</h1>
       <p className="mt-2 text-paper/65">
         “{task.title}” ·{" "}
         <span className="tnum font-semibold text-paper">
-          {fmtDuration(elapsedSeconds(db, task.id, now))}
-        </span>{" "}
-        tracked
+          {t("{time} tracked", {
+            time: fmtDuration(elapsedSeconds(db, task.id, now)),
+          })}
+        </span>
       </p>
 
       {saved ? (
         <p className="mt-5 flex items-center gap-2 text-sm text-brand-soft">
-          <Check className="size-4" /> Note saved for your manager
+          <Check className="size-4" /> {t("Note saved for your manager")}
         </p>
       ) : (
         <form
@@ -578,21 +594,21 @@ function DoneScreen({
         >
           <input
             className="field"
-            placeholder="Add a short note (optional)"
-            aria-label="Completion note"
+            placeholder={t("Add a short note (optional)")}
+            aria-label={t("Completion note")}
             value={note}
             onChange={(e) => setNote(e.target.value)}
           />
           <Btn type="submit" disabled={!note.trim()}>
-            Save
+            {t("Save")}
           </Btn>
         </form>
       )}
 
       {next ? (
-        <div className="glass mt-6 w-full rounded-3xl p-5 text-left">
+        <div className="glass mt-6 w-full rounded-3xl p-5 text-start">
           <div className="flex items-center gap-2">
-            <span className="eyebrow">Next priority</span>
+            <span className="eyebrow">{t("Next priority")}</span>
             <PriorityBadge priority={next.priority} />
           </div>
           <p className="mt-2 text-lg font-semibold">{next.title}</p>
@@ -605,16 +621,18 @@ function DoneScreen({
             className="mt-4 flex h-14 w-full items-center justify-center gap-2.5 rounded-2xl bg-brand text-lg font-bold text-ink transition active:scale-[0.98]"
           >
             <Play className="size-5 fill-current" />{" "}
-            {next.status === "paused" ? "Resume next task" : "Start next task"}
+            {next.status === "paused"
+              ? t("Resume next task")
+              : t("Start next task")}
           </button>
         </div>
       ) : (
         <p className="mt-6 text-sm text-paper/60">
-          That was your last open task.
+          {t("That was your last open task.")}
         </p>
       )}
       <Btn variant="subtle" className="mt-4" onClick={onClose}>
-        Back to my day
+        {t("Back to my day")}
       </Btn>
     </div>
   );
@@ -644,13 +662,14 @@ export function MyTasks() {
     tab === "todo" ? todo : tab === "done" ? done : [...todo, ...done];
   return (
     <div className="mx-auto max-w-2xl">
-      <p className="eyebrow">My tasks</p>
+      <p className="eyebrow">{t("My tasks")}</p>
       <h1 className="display mt-2 text-4xl md:text-5xl">
-        Everything assigned to you
+        {t("Everything assigned to you")}
       </h1>
       <p className="mt-2 text-sm text-paper/60">
-        Sorted by priority, then deadline. Tap a task for details and timer
-        controls.
+        {t(
+          "Sorted by priority, then deadline. Tap a task for details and timer controls.",
+        )}
       </p>
       <Segmented
         id="my-tasks"
@@ -658,22 +677,22 @@ export function MyTasks() {
         value={tab}
         onChange={setTab}
         options={[
-          { value: "todo", label: `To do · ${todo.length}` },
-          { value: "done", label: `Completed · ${done.length}` },
-          { value: "all", label: "All" },
+          { value: "todo", label: t("To do · {n}", { n: todo.length }) },
+          { value: "done", label: t("Completed · {n}", { n: done.length }) },
+          { value: "all", label: t("All") },
         ]}
       />
       <div className="mt-4 space-y-3">
         {list.length === 0 && (
           <Empty
             icon={<ListChecks className="size-6" />}
-            title="Nothing here"
-            hint="Tasks you are assigned will show up in this list."
+            title={t("Nothing here")}
+            hint={t("Tasks you are assigned will show up in this list.")}
           />
         )}
         <AnimatePresence initial={false}>
-          {list.map((t) => (
-            <TaskCard key={t.id} task={t} hideAssignee />
+          {list.map((task) => (
+            <TaskCard key={task.id} task={task} hideAssignee />
           ))}
         </AnimatePresence>
       </div>
@@ -713,11 +732,14 @@ export function MyProgress() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <p className="eyebrow">My progress</p>
-      <h1 className="display mt-2 text-4xl md:text-5xl">Your day so far</h1>
+      <p className="eyebrow">{t("My progress")}</p>
+      <h1 className="display mt-2 text-4xl md:text-5xl">
+        {t("Your day so far")}
+      </h1>
       <p className="mt-2 text-sm text-paper/60">
-        This summary builds itself from your tasks. You never need to write a
-        report.
+        {t(
+          "This summary builds itself from your tasks. You never need to write a report.",
+        )}
       </p>
 
       <div className="glass mt-6 flex flex-wrap items-center gap-5 rounded-3xl p-5">
@@ -727,7 +749,7 @@ export function MyProgress() {
               {Math.round(s.completion_rate)}%
             </p>
             <p className="mt-1 text-[10px] tracking-wider text-paper/50 uppercase">
-              complete
+              {t("complete")}
             </p>
           </div>
         </Ring>
@@ -746,18 +768,19 @@ export function MyProgress() {
                 {v}
               </dd>
               <dt className="mt-1 text-[11px] tracking-wider text-paper/50 uppercase">
-                {k}
+                {t(k)}
               </dt>
             </div>
           ))}
         </dl>
       </div>
       <p className="mt-2 text-xs text-paper/45">
-        Counts cover tasks due today. Active task time is the time with a timer
-        running; it is not attendance or total working hours.
+        {t(
+          "Counts cover tasks due today. Active task time is the time with a timer running; it is not attendance or total working hours.",
+        )}
       </p>
 
-      <Panel title="Last 7 days" className="mt-5">
+      <Panel title={t("Last 7 days")} className="mt-5">
         <div className="flex h-36 items-end gap-2">
           {data.week.map((d, n) => (
             <div
@@ -779,25 +802,27 @@ export function MyProgress() {
                 transition={{ duration: 0.7, delay: n * 0.05, ease: EASE }}
               />
               <span className="text-[10px] text-paper/45">
-                {fmtKey(d.date).split(" ")[0]}
+                {fmtKey(d.date).split(" ")[0].replace(/[,،]$/, "")}
               </span>
             </div>
           ))}
         </div>
-        <p className="mt-3 text-xs text-paper/45">Tasks completed per day.</p>
+        <p className="mt-3 text-xs text-paper/45">
+          {t("Tasks completed per day.")}
+        </p>
       </Panel>
 
-      <Panel title="Completed today" className="mt-5">
+      <Panel title={t("Completed today")} className="mt-5">
         {data.history.length === 0 ? (
           <Empty
-            title="Nothing completed yet"
-            hint="Finished tasks appear here with the time you tracked."
+            title={t("Nothing completed yet")}
+            hint={t("Finished tasks appear here with the time you tracked.")}
           />
         ) : (
           <ul className="space-y-1">
-            {data.history.map((t) => (
+            {data.history.map((h) => (
               <li
-                key={t.id}
+                key={h.id}
                 className="flex items-center gap-3 border-b border-white/5 py-2.5 last:border-0"
               >
                 <span className="grid size-7 shrink-0 place-items-center rounded-full bg-brand/15 text-brand">
@@ -805,14 +830,14 @@ export function MyProgress() {
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium">
-                    {t.title}
+                    {h.title}
                   </span>
                   <span className="block text-xs text-paper/45">
-                    Finished at {fmtTime(t.completed_at!)}
+                    {t("Finished at {time}", { time: fmtTime(h.completed_at!) })}
                   </span>
                 </span>
                 <span className="tnum font-mono text-sm text-paper/75">
-                  {fmtDuration(elapsedSeconds(db, t.id, now))}
+                  {fmtDuration(elapsedSeconds(db, h.id, now))}
                 </span>
               </li>
             ))}
@@ -834,7 +859,7 @@ export function Profile() {
   const restaurant = db.restaurants.find((r) => r.id === me.restaurant_id);
   return (
     <div className="mx-auto max-w-2xl">
-      <p className="eyebrow">Profile</p>
+      <p className="eyebrow">{t("Profile")}</p>
       <div className="glass mt-3 flex flex-wrap items-center gap-5 rounded-3xl p-5">
         <Avatar user={me} size={84} />
         <div className="min-w-0">
@@ -846,19 +871,19 @@ export function Profile() {
           </p>
           {manager && (
             <p className="mt-0.5 text-xs text-paper/45">
-              Reports to {manager.name}
+              {t("Reports to {name}", { name: manager.name })}
             </p>
           )}
         </div>
       </div>
 
       <Panel
-        title="What you can do"
+        title={t("What you can do")}
         icon={<ShieldCheck className="size-5" />}
         className="mt-5"
       >
         <p className="mb-3 text-xs text-paper/50">
-          Access level: {ROLE_LABEL[me.role]}
+          {t("Access level: {role}", { role: t(ROLE_LABEL[me.role]) })}
         </p>
         <ul className="space-y-2">
           {ROLE_PERMISSIONS[me.role].map((p) => (
@@ -866,28 +891,29 @@ export function Profile() {
               key={p}
               className="flex items-start gap-2.5 text-sm text-paper/80"
             >
-              <Check className="mt-0.5 size-4 shrink-0 text-brand" /> {p}
+              <Check className="mt-0.5 size-4 shrink-0 text-brand" /> {t(p)}
             </li>
           ))}
         </ul>
         <p className="mt-3 text-xs text-paper/45">
-          You cannot see other employees&rsquo; reports or the executive
-          dashboards.
+          {t(
+            "You cannot see other employees’ reports or the executive dashboards.",
+          )}
         </p>
       </Panel>
 
-      <Panel title="Demo environment" className="mt-5">
+      <Panel title={t("Demo environment")} className="mt-5">
         <p className="text-sm text-paper/65">
-          This is a demonstration with fictional people and tasks. Switch to
-          another profile to see the same data as a manager or executive, or
-          reset the demo to its original state.
+          {t(
+            "This is a demonstration with fictional people and tasks. Switch to another profile to see the same data as a manager or executive, or reset the demo to its original state.",
+          )}
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
           <Btn onClick={openDemo}>
-            <Users className="size-4" /> Switch profile
+            <Users className="size-4" /> {t("Switch profile")}
           </Btn>
           <Btn variant="subtle" onClick={openDemo}>
-            <RotateCcw className="size-4" /> Reset demo
+            <RotateCcw className="size-4" /> {t("Reset demo")}
           </Btn>
         </div>
       </Panel>

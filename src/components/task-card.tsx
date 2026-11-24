@@ -14,9 +14,10 @@ import {
   Undo2,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useState } from "react";
+import { Fragment, useState, type ReactNode } from "react";
 import { Avatar, Btn, EASE, PriorityBadge, StatusBadge } from "@/components/kit";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { t } from "@/lib/i18n";
 import {
   assignableUsers,
   canEscalate,
@@ -29,6 +30,16 @@ import { actions, useDb, useMe, useNow } from "@/lib/store";
 import { fmtAgo, fmtClock, fmtDay, fmtDue, fmtDuration, fmtTime } from "@/lib/time";
 import { PRIORITIES, PRIORITY_COLOR, PRIORITY_LABEL, type Task } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+/** Translate a sentence and drop React nodes into its `{name}` placeholders. */
+function rich(en: string, nodes: Record<string, ReactNode>): ReactNode[] {
+  return t(en)
+    .split(/(\{\w+\})/)
+    .map((part, n) => {
+      const key = /^\{(\w+)\}$/.exec(part)?.[1];
+      return <Fragment key={n}>{key && key in nodes ? nodes[key] : part}</Fragment>;
+    });
+}
 
 /** Live active-time clock for a task. Ticks every second only while running. */
 export function TrackedTime({ task, className }: { task: Task; className?: string }) {
@@ -61,14 +72,16 @@ export function useStartTask() {
   const dialog = (
     <Dialog open={pending !== null} onOpenChange={(o) => !o && setPending(null)}>
       <DialogContent className="glass-solid block space-y-3 rounded-3xl p-6 sm:max-w-md">
-        <p className="eyebrow">One task at a time</p>
-        <DialogTitle className="display text-3xl">Pause your current task?</DialogTitle>
+        <p className="eyebrow">{t("One task at a time")}</p>
+        <DialogTitle className="display text-3xl">{t("Pause your current task?")}</DialogTitle>
         <DialogDescription className="text-paper/65">
-          You are working on <span className="font-semibold text-paper">“{running?.title}”</span>. Pause it and start{" "}
-          <span className="font-semibold text-paper">“{next?.title}”</span>? Your tracked time is saved.
+          {rich("You are working on {current}. Pause it and start {next}? Your tracked time is saved.", {
+            current: <span className="font-semibold text-paper">“{running?.title}”</span>,
+            next: <span className="font-semibold text-paper">“{next?.title}”</span>,
+          })}
         </DialogDescription>
         <div className="mt-2 flex flex-wrap justify-end gap-2">
-          <Btn onClick={() => setPending(null)}>Keep working</Btn>
+          <Btn onClick={() => setPending(null)}>{t("Keep working")}</Btn>
           <Btn
             variant="primary"
             onClick={() => {
@@ -76,7 +89,7 @@ export function useStartTask() {
               setPending(null);
             }}
           >
-            <Pause className="size-4" /> Pause and start
+            <Pause className="size-4" /> {t("Pause and start")}
           </Btn>
         </div>
       </DialogContent>
@@ -92,28 +105,30 @@ export function TimerControls({ task }: { task: Task }) {
     <div className="flex flex-wrap items-center gap-2">
       {task.status === "pending" && (
         <Btn variant="primary" onClick={() => start(task.id)}>
-          <Play className="size-4 fill-current" /> Start
+          <Play className="size-4 fill-current" /> {t("Start")}
         </Btn>
       )}
       {task.status === "paused" && (
         <Btn variant="primary" onClick={() => start(task.id)}>
-          <Play className="size-4 fill-current" /> Resume
+          <Play className="size-4 fill-current" /> {t("Resume")}
         </Btn>
       )}
       {task.status === "in_progress" && (
         <Btn onClick={() => actions.pauseTask(task.id)}>
-          <Pause className="size-4 fill-current" /> Pause
+          <Pause className="size-4 fill-current" /> {t("Pause")}
         </Btn>
       )}
       {(task.status === "in_progress" || task.status === "paused") && (
         <Btn variant={task.status === "in_progress" ? "primary" : "ghost"} onClick={() => actions.completeTask(task.id)}>
-          <Check className="size-4" /> Done
+          <Check className="size-4" /> {t("Done")}
         </Btn>
       )}
       {task.status === "completed" && (
         <p className="flex items-center gap-2 text-sm text-brand-soft">
-          <Check className="size-4" /> Completed
-          {task.completed_at ? ` ${fmtDay(task.completed_at)} at ${fmtTime(task.completed_at)}` : ""}
+          <Check className="size-4" />{" "}
+          {task.completed_at
+            ? t("Completed {day} at {time}", { day: fmtDay(task.completed_at), time: fmtTime(task.completed_at) })
+            : t("Completed")}
         </p>
       )}
       {dialog}
@@ -153,22 +168,22 @@ export function TaskCard({
       className={cn("glass relative overflow-hidden rounded-2xl", running && "ring-1 ring-brand/45", done && "opacity-75")}
       data-task={task.id}
     >
-      <span className="absolute inset-y-0 left-0 w-1" style={{ background: color }} />
+      <span className="absolute inset-y-0 start-0 w-1" style={{ background: color }} />
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="block w-full p-4 pl-5 text-left"
+        className="block w-full p-4 ps-5 text-start"
       >
         <div className="flex flex-wrap items-center gap-2">
           <PriorityBadge priority={task.priority} />
           <StatusBadge status={task.status} overdue={overdue} />
           {over > 0 && (
             <span className="tnum rounded-full bg-warn/15 px-2 py-0.5 text-[11px] font-semibold tracking-wider text-warn uppercase ring-1 ring-warn/40 ring-inset">
-              Over time +{fmtDuration(over)}
+              {t("Over time +{d}", { d: fmtDuration(over) })}
             </span>
           )}
-          <ChevronDown className={cn("ml-auto size-4 shrink-0 text-paper/40 transition-transform", open && "rotate-180")} />
+          <ChevronDown className={cn("ms-auto size-4 shrink-0 text-paper/40 transition-transform", open && "rotate-180")} />
         </div>
         <h3 className={cn("mt-2.5 text-[15px] leading-snug font-semibold", done && "line-through decoration-paper/30")}>
           {task.title}
@@ -176,7 +191,7 @@ export function TaskCard({
         {!hideAssignee && (
           <div className="mt-2.5 flex items-center gap-2 text-xs text-paper/60">
             <Avatar user={assignee} size={22} live={running} />
-            <span className="truncate font-medium text-paper/85">{assignee?.name ?? "Unassigned"}</span>
+            <span className="truncate font-medium text-paper/85">{assignee?.name ?? t("Unassigned")}</span>
             <span className="text-paper/30">·</span>
             <span className="truncate">{dept?.name}</span>
           </div>
@@ -187,12 +202,12 @@ export function TaskCard({
           </span>
           {task.estimated_duration ? (
             <span className="flex items-center gap-1.5">
-              <Timer className="size-3.5" /> {fmtDuration(task.estimated_duration * 60)} allowed
+              <Timer className="size-3.5" /> {t("{d} allowed", { d: fmtDuration(task.estimated_duration * 60) })}
             </span>
           ) : null}
           <span className={cn("tnum flex items-center gap-1.5 font-mono", running ? "text-brand" : elapsed > 0 ? "text-paper/80" : "")}>
             {running && <span className="live-dot size-1.5 rounded-full bg-brand text-brand" />}
-            {fmtClock(elapsed)} tracked
+            {t("{time} tracked", { time: fmtClock(elapsed) })}
           </span>
         </div>
       </button>
@@ -235,7 +250,7 @@ function TaskDetails({ task, siblings }: { task: Task; siblings?: string[] }) {
   };
 
   return (
-    <div className="space-y-4 border-t border-white/8 p-4 pl-5">
+    <div className="space-y-4 border-t border-white/8 p-4 ps-5">
       <p className="text-sm leading-relaxed text-paper/75">{task.description}</p>
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
@@ -246,7 +261,7 @@ function TaskDetails({ task, siblings }: { task: Task; siblings?: string[] }) {
           ["Due", `${fmtDay(task.due_at)} ${fmtTime(task.due_at)}`],
         ].map(([k, v]) => (
           <div key={k}>
-            <dt className="text-paper/45">{k}</dt>
+            <dt className="text-paper/45">{t(k)}</dt>
             <dd className="font-medium text-paper/85">{v}</dd>
           </div>
         ))}
@@ -254,13 +269,13 @@ function TaskDetails({ task, siblings }: { task: Task; siblings?: string[] }) {
 
       {task.internal_notes && canSeeInternalNotes(me) && (
         <p className="rounded-xl border border-warn/25 bg-warn/8 p-3 text-xs text-paper/80">
-          <span className="font-semibold text-warn">Internal note · </span>
+          <span className="font-semibold text-warn">{t("Internal note · ")}</span>
           {task.internal_notes}
         </p>
       )}
       {task.completion_note && (
         <p className="rounded-xl border border-brand/25 bg-brand/8 p-3 text-xs text-paper/80">
-          <span className="font-semibold text-brand-soft">Completion note · </span>
+          <span className="font-semibold text-brand-soft">{t("Completion note · ")}</span>
           {task.completion_note}
         </p>
       )}
@@ -269,10 +284,10 @@ function TaskDetails({ task, siblings }: { task: Task; siblings?: string[] }) {
 
       {manage && (
         <div className="space-y-3 rounded-2xl border border-white/8 bg-white/[0.025] p-3">
-          <p className="text-[11px] font-semibold tracking-[0.14em] text-paper/45 uppercase">Manage task</p>
+          <p className="text-[11px] font-semibold tracking-[0.14em] text-paper/45 uppercase">{t("Manage task")}</p>
           {task.status !== "completed" && (
             <>
-              <div className="flex flex-wrap gap-1.5" role="group" aria-label="Priority">
+              <div className="flex flex-wrap gap-1.5" role="group" aria-label={t("Priority")}>
                 {PRIORITIES.map((p) => (
                   <button
                     key={p}
@@ -286,18 +301,18 @@ function TaskDetails({ task, siblings }: { task: Task; siblings?: string[] }) {
                         : { color: PRIORITY_COLOR[p], boxShadow: `inset 0 0 0 1px ${PRIORITY_COLOR[p]}55` }
                     }
                   >
-                    {PRIORITY_LABEL[p]}
+                    {t(PRIORITY_LABEL[p])}
                   </button>
                 ))}
               </div>
               <label className="block text-xs text-paper/55">
-                Assigned to
+                {t("Assigned to")}
                 <select
                   className="field mt-1"
                   value={task.assigned_to ?? ""}
                   onChange={(e) => e.target.value && actions.reassignTask(task.id, e.target.value)}
                 >
-                  {!task.assigned_to && <option value="">Choose a team member…</option>}
+                  {!task.assigned_to && <option value="">{t("Choose a team member…")}</option>}
                   {task.assigned_to && !assignable.some((u) => u.id === task.assigned_to) && (
                     <option value={task.assigned_to}>{i.userById.get(task.assigned_to)?.name}</option>
                   )}
@@ -314,31 +329,31 @@ function TaskDetails({ task, siblings }: { task: Task; siblings?: string[] }) {
             {siblings && siblings.length > 1 && task.status !== "completed" && (
               <>
                 <Btn size="sm" onClick={() => move(-1)} disabled={pos <= 0}>
-                  <ArrowUp className="size-3.5" /> Move up
+                  <ArrowUp className="size-3.5" /> {t("Move up")}
                 </Btn>
                 <Btn size="sm" onClick={() => move(1)} disabled={pos < 0 || pos >= siblings.length - 1}>
-                  <ArrowDown className="size-3.5" /> Move down
+                  <ArrowDown className="size-3.5" /> {t("Move down")}
                 </Btn>
               </>
             )}
             {task.status === "completed" && (
               <Btn size="sm" onClick={() => actions.reopenTask(task.id)}>
-                <Undo2 className="size-3.5" /> Reopen task
+                <Undo2 className="size-3.5" /> {t("Reopen task")}
               </Btn>
             )}
             {task.status !== "completed" &&
               (confirmRemove ? (
                 <>
                   <Btn size="sm" variant="danger" onClick={() => actions.removeTask(task.id)}>
-                    Confirm remove
+                    {t("Confirm remove")}
                   </Btn>
                   <Btn size="sm" variant="subtle" onClick={() => setConfirmRemove(false)}>
-                    Cancel
+                    {t("Cancel")}
                   </Btn>
                 </>
               ) : (
                 <Btn size="sm" variant="subtle" onClick={() => setConfirmRemove(true)}>
-                  <Trash2 className="size-3.5" /> Remove
+                  <Trash2 className="size-3.5" /> {t("Remove")}
                 </Btn>
               ))}
           </div>
@@ -348,11 +363,11 @@ function TaskDetails({ task, siblings }: { task: Task; siblings?: string[] }) {
       {canEscalate(me, task) &&
         (escalated ? (
           <p className="flex items-center gap-2 text-xs font-semibold text-crit">
-            <Flag className="size-3.5" /> Escalated to the Operations Manager
+            <Flag className="size-3.5" /> {t("Escalated to the Operations Manager")}
           </p>
         ) : (
           <Btn size="sm" variant="danger" onClick={() => actions.escalateTask(task.id, "")}>
-            <Flag className="size-3.5" /> Escalate to Operations Manager
+            <Flag className="size-3.5" /> {t("Escalate to Operations Manager")}
           </Btn>
         ))}
 

@@ -4,6 +4,7 @@
 
 import { animate, motion, useReducedMotion } from "motion/react";
 import { useEffect, useId, useRef, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { t } from "@/lib/i18n";
 import { PRIORITY_COLOR, PRIORITY_LABEL, STATUS_LABEL, type Priority, type TaskStatus, type User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -52,7 +53,7 @@ export function Avatar({ user, size = 36, live }: { user?: User | null; size?: n
       <span
         className="inline-grid shrink-0 place-items-center rounded-full border border-dashed border-white/25 text-paper/50"
         style={{ width: size, height: size, fontSize: size * 0.4 }}
-        aria-label="Unassigned"
+        aria-label={t("Unassigned")}
       >
         ?
       </span>
@@ -77,7 +78,7 @@ export function Avatar({ user, size = 36, live }: { user?: User | null; size?: n
       aria-hidden="true"
     >
       {initials}
-      {live && <span className="live-dot absolute -right-0.5 -bottom-0.5 size-3 rounded-full border-2 border-ink bg-brand text-brand" />}
+      {live && <span className="live-dot absolute -end-0.5 -bottom-0.5 size-3 rounded-full border-2 border-ink bg-brand text-brand" />}
     </span>
   );
 }
@@ -90,7 +91,7 @@ export function PriorityBadge({ priority, className }: { priority: Priority; cla
       style={{ color: c, background: `${c}1c`, boxShadow: `inset 0 0 0 1px ${c}45` }}
     >
       <span className="size-1.5 rounded-full" style={{ background: c }} />
-      {PRIORITY_LABEL[priority]}
+      {t(PRIORITY_LABEL[priority])}
     </span>
   );
 }
@@ -111,11 +112,11 @@ export function StatusBadge({ status, overdue }: { status: TaskStatus; overdue?:
         style={{ color: c, background: `${c}17` }}
       >
         {status === "in_progress" && <span className="live-dot size-1.5 rounded-full bg-current" />}
-        {STATUS_LABEL[status]}
+        {t(STATUS_LABEL[status])}
       </span>
       {overdue && (
         <span className="rounded-full bg-crit/15 px-2 py-0.5 text-[11px] font-semibold tracking-wider text-crit uppercase ring-1 ring-crit/40 ring-inset">
-          Overdue
+          {t("Overdue")}
         </span>
       )}
     </span>
@@ -419,7 +420,7 @@ export function Empty({ icon, title, hint }: { icon?: ReactNode; title: string; 
   );
 }
 
-export function Loader({ label = "Loading Arena OS" }: { label?: string }) {
+export function Loader({ label = t("Loading Arena OS") }: { label?: string }) {
   return (
     <div className="grid min-h-dvh place-items-center" role="status" aria-live="polite">
       <div className="flex flex-col items-center gap-5">

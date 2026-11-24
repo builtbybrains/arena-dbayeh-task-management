@@ -4,6 +4,7 @@ import { FilterX, Search } from "lucide-react";
 import { useMemo } from "react";
 import { Btn, Chip, Empty } from "@/components/kit";
 import { TaskCard } from "@/components/task-card";
+import { t } from "@/lib/i18n";
 import { isCompanyWide } from "@/lib/permissions";
 import { boardTasks, idx, isOverdue, overTimeSeconds, sortTasks } from "@/lib/selectors";
 import { useDb, useMe, useNow } from "@/lib/store";
@@ -22,6 +23,13 @@ const QUICK: { value: BoardQuick; label: string; tone?: "crit" | "warn" }[] = [
   { value: "done", label: "Completed today" },
   { value: "all", label: "Everything" },
 ];
+
+const EMPTY_LANE: Record<Priority, string> = {
+  critical: "No critical tasks",
+  high: "No high priority tasks",
+  medium: "No medium priority tasks",
+  low: "No low priority tasks",
+};
 
 function matchesQuick(q: BoardQuick, t: Task, db: Database, now: number): boolean {
   const open = t.status !== "completed";
@@ -47,7 +55,7 @@ function matchesQuick(q: BoardQuick, t: Task, db: Database, now: number): boolea
   }
 }
 
-const select = "field h-10 w-auto min-w-[150px] flex-1 py-0 pr-8 sm:flex-none";
+const select = "field h-10 w-auto min-w-[150px] flex-1 py-0 pe-8 sm:flex-none";
 
 /**
  * Priority lanes (Critical, High, Medium, Low) with filters for status,
@@ -99,7 +107,7 @@ export function TaskBoard() {
 
   return (
     <div>
-      <div className="no-print mb-3 flex gap-1.5 overflow-x-auto pb-1" role="group" aria-label="Filter by status">
+      <div className="no-print mb-3 flex gap-1.5 overflow-x-auto pb-1" role="group" aria-label={t("Filter by status")}>
         {QUICK.map((q) => {
           const on = f.quick === q.value;
           const n = counts[q.value];
@@ -113,7 +121,7 @@ export function TaskBoard() {
                 !on && n > 0 && q.tone === "warn" && "border-warn/40 text-warn",
               )}
             >
-              {q.label}
+              {t(q.label)}
               <span className={cn("tnum rounded-full px-1.5 text-[10px]", on ? "bg-brand/25" : "bg-white/10")}>{n}</span>
             </Chip>
           );
@@ -123,11 +131,11 @@ export function TaskBoard() {
       <div className="no-print mb-5 flex flex-wrap items-center gap-2">
         <select
           className={select}
-          aria-label="Filter by assignee"
+          aria-label={t("Filter by assignee")}
           value={f.assignee}
           onChange={(e) => setBoard({ assignee: e.target.value })}
         >
-          <option value="">Everyone</option>
+          <option value="">{t("Everyone")}</option>
           {people.map((u) => (
             <option key={u.id} value={u.id}>
               {u.name} · {u.title}
@@ -137,11 +145,11 @@ export function TaskBoard() {
         {wide && (
           <select
             className={select}
-            aria-label="Filter by department"
+            aria-label={t("Filter by department")}
             value={f.dept}
             onChange={(e) => setBoard({ dept: e.target.value })}
           >
-            <option value="">All departments</option>
+            <option value="">{t("All departments")}</option>
             {db.departments.map((d) => (
               <option key={d.id} value={d.id}>
                 {d.name}
@@ -152,11 +160,11 @@ export function TaskBoard() {
         {outlets.length > 0 && (
           <select
             className={select}
-            aria-label="Filter by restaurant"
+            aria-label={t("Filter by restaurant")}
             value={f.restaurant}
             onChange={(e) => setBoard({ restaurant: e.target.value })}
           >
-            <option value="">All restaurants</option>
+            <option value="">{t("All restaurants")}</option>
             {outlets.map((r) => (
               <option key={r.id} value={r.id}>
                 {r.name}
@@ -166,14 +174,14 @@ export function TaskBoard() {
         )}
         <select
           className={select}
-          aria-label="Filter by priority"
+          aria-label={t("Filter by priority")}
           value={f.priority}
           onChange={(e) => setBoard({ priority: e.target.value as Priority | "" })}
         >
-          <option value="">Any priority</option>
+          <option value="">{t("Any priority")}</option>
           {PRIORITIES.map((p) => (
             <option key={p} value={p}>
-              {PRIORITY_LABEL[p]}
+              {t(PRIORITY_LABEL[p])}
             </option>
           ))}
         </select>
@@ -182,44 +190,48 @@ export function TaskBoard() {
           <input
             value={f.q}
             onChange={(e) => setBoard({ q: e.target.value })}
-            placeholder="Search task or name"
-            aria-label="Search tasks"
+            placeholder={t("Search task or name")}
+            aria-label={t("Search tasks")}
             className="w-full bg-transparent text-sm outline-none placeholder:text-paper/40"
           />
         </label>
         {filtered && (
           <Btn size="sm" variant="subtle" onClick={resetBoard}>
-            <FilterX className="size-4" /> Clear filters
+            <FilterX className="size-4" /> {t("Clear filters")}
           </Btn>
         )}
-        <p className="tnum ml-auto text-xs text-paper/50" aria-live="polite">
-          {total} {total === 1 ? "task" : "tasks"}
-          {f.assignee ? ` for ${i.userById.get(f.assignee)?.name ?? ""}` : ""}
+        <p className="tnum ms-auto text-xs text-paper/50" aria-live="polite">
+          {f.assignee
+            ? t(total === 1 ? "{n} task for {name}" : "{n} tasks for {name}", {
+                n: total,
+                name: i.userById.get(f.assignee)?.name ?? "",
+              })
+            : t(total === 1 ? "{n} task" : "{n} tasks", { n: total })}
         </p>
       </div>
 
       {total === 0 ? (
-        <Empty title="No tasks match" hint="Nothing fits these filters. Clear them or pick another status." />
+        <Empty title={t("No tasks match")} hint={t("Nothing fits these filters. Clear them or pick another status.")} />
       ) : (
         <div className="grid items-start gap-4 md:grid-cols-2 2xl:grid-cols-4">
           {PRIORITIES.map((p, n) => {
             const ids = lanes[n].filter((t) => t.status !== "completed").map((t) => t.id);
             return (
-              <section key={p} aria-label={`${PRIORITY_LABEL[p]} priority`}>
+              <section key={p} aria-label={t("{priority} priority", { priority: t(PRIORITY_LABEL[p]) })}>
                 <h2 className="mb-3 flex items-center gap-2 font-display text-lg font-bold tracking-wide uppercase">
                   <span className="size-2.5 rounded-full" style={{ background: PRIORITY_COLOR[p] }} />
-                  {PRIORITY_LABEL[p]}
+                  {t(PRIORITY_LABEL[p])}
                   <span className="tnum rounded-full bg-white/8 px-2 py-0.5 font-sans text-xs font-semibold text-paper/60">
                     {lanes[n].length}
                   </span>
                 </h2>
                 <div className="space-y-3">
-                  {lanes[n].map((t) => (
-                    <TaskCard key={t.id} task={t} siblings={ids} />
+                  {lanes[n].map((task) => (
+                    <TaskCard key={task.id} task={task} siblings={ids} />
                   ))}
                   {lanes[n].length === 0 && (
                     <p className="rounded-2xl border border-dashed border-white/10 px-4 py-6 text-center text-xs text-paper/40">
-                      No {PRIORITY_LABEL[p].toLowerCase()} tasks
+                      {t(EMPTY_LANE[p])}
                     </p>
                   )}
                 </div>
