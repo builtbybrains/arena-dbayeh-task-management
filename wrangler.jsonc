@@ -12,6 +12,8 @@
       "database_id": "8ad1feae-ce03-4df1-8738-a393c6d26670"
     }
   ],
+  // Checks the watched Instagram page every 3 minutes (free plan allows cron triggers).
+  "triggers": { "crons": ["*/3 * * * *"] },
   "workers_dev": true,
   "preview_urls": false,
   "observability": { "enabled": true }

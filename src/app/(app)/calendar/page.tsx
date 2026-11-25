@@ -340,6 +340,11 @@ function RemindersTab() {
                       {r.created_by !== me.id && ` · ${t("from {name}", { name: i.userById.get(r.created_by)?.name ?? "" })}`}
                     </p>
                   </div>
+                  {r.link && (
+                    <a href={r.link} target="_blank" rel="noopener noreferrer" className="inline-flex h-8 shrink-0 items-center rounded-full bg-brand px-3 text-xs font-bold text-ink">
+                      {t("Open post")}
+                    </a>
+                  )}
                   <Btn size="sm" variant={due ? "primary" : "subtle"} onClick={() => actions.dismissReminder(r.id)}>
                     {t("Done")}
                   </Btn>

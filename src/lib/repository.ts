@@ -91,6 +91,9 @@ export const sampleRepository: DataRepository = {
 /** Where the sync API lives: same site in production, the deployed worker in `next dev`. */
 const API = (process.env.NEXT_PUBLIC_SYNC_URL ?? "").replace(/\/$/, "");
 const CACHE_KEY = "arena-os-workspace-v1";
+
+/** Full URL of a sync API route, e.g. apiUrl("/api/instagram/status"). */
+export const apiUrl = (path: string) => `${API}${path}`;
 const POLL_MS = 8_000;
 const BATCH = 300;
 
@@ -124,6 +127,9 @@ export function diff(prev: Database | null, next: Database): WireRecord[] {
   if (next.workspace && next.workspace !== prev?.workspace) {
     out.push({ c: "meta", id: "workspace", d: JSON.stringify(next.workspace) });
   }
+  if (next.instagram && next.instagram !== prev?.instagram) {
+    out.push({ c: "meta", id: "instagram_watch", d: JSON.stringify(next.instagram) });
+  }
   for (const c of COLLECTIONS) {
     const a = prev?.[c] as { id: string }[] | undefined;
     const b = (next[c] ?? []) as { id: string }[];
@@ -149,6 +155,7 @@ function apply(db: Database, records: WireRecord[], skip: Set<string>): Database
     }
     if (r.c === "meta") {
       if (r.id === "workspace") next.workspace = value as Database["workspace"];
+      if (r.id === "instagram_watch") next.instagram = value as Database["instagram"];
       continue;
     }
     if (!(COLLECTIONS as readonly string[]).includes(r.c)) continue;

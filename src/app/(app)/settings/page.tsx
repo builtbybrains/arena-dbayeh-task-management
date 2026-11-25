@@ -3,6 +3,7 @@
 import { Building2, Check, Cloud, Info, Languages, LogOut, RotateCcw, ShieldCheck, Sparkles, TriangleAlert, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { InstagramPanel } from "@/components/instagram-panel";
 import { Btn, PageHeader, Panel, Segmented } from "@/components/kit";
 import { setLang, t, useLang } from "@/lib/i18n";
 import { canEraseWorkspace, ROLE_PERMISSIONS } from "@/lib/permissions";
@@ -99,6 +100,8 @@ export default function SettingsPage() {
             )}
           </Panel>
         )}
+
+        {(me.role === "owner" || me.role === "ops") && <InstagramPanel />}
 
         <Panel title={t("Language")} icon={<Languages className="size-5" />}>
           <Segmented

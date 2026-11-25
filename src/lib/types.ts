@@ -254,6 +254,17 @@ export interface Reminder {
   done_by: string[]; // people who dismissed it
   created_at: string;
   deleted_at: string | null;
+  link?: string | null; // e.g. the Instagram post to open
+}
+
+/** Which Instagram page to watch and who hears about new posts (see worker/instagram.js). */
+export interface InstagramWatch {
+  username: string;
+  enabled: boolean;
+  recipients: string[]; // user ids who get an alert
+  task_to: string | null; // optional: also give this person a "like and repost" task
+  set_by: string;
+  updated_at: string;
 }
 
 export type Repeat = "daily" | "weekly" | "monthly";
@@ -293,6 +304,7 @@ export interface Database {
   /** Set on a venue's slice of the data (see scope.ts); never stored. */
   scope_venue?: string;
   workspace: Workspace | null;
+  instagram?: InstagramWatch | null;
   venues: Venue[];
   users: User[];
   departments: Department[];

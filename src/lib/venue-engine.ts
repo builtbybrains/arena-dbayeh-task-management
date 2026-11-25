@@ -503,6 +503,24 @@ export function setRevenue(db: Database, actor: User, now: number, date: string,
 export const revenueId = (venueId: string, date: string, source: RevenueEntry["source"]) =>
   venueId === ARENA ? `${date}_${source}` : `${venueId}_${date}_${source}`;
 
+// --- Instagram watch -----------------------------------------------------------
+
+export function saveInstagramWatch(
+  db: Database,
+  actor: User,
+  now: number,
+  input: { username: string; enabled: boolean; recipients: string[]; task_to: string | null },
+): Database {
+  if (actor.role !== "owner" && actor.role !== "ops") fail("Only the Owner or Operations Manager can set up Instagram alerts.");
+  const username = input.username.trim().replace(/^@/, "").replace(/^https?:\/\/(www\.)?instagram\.com\//i, "").split(/[/?#]/)[0].toLowerCase();
+  if (!/^[a-z0-9._]{1,30}$/.test(username)) fail("Enter the Instagram page name, for example quatro.dbayeh.");
+  if (input.enabled && input.recipients.length === 0) fail("Choose who gets the alert.");
+  return {
+    ...db,
+    instagram: { username, enabled: input.enabled, recipients: [...new Set(input.recipients)], task_to: input.task_to || null, set_by: actor.id, updated_at: iso(now) },
+  };
+}
+
 // --- Reminders ------------------------------------------------------------------
 
 export interface ReminderInput {

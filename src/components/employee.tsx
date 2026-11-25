@@ -25,8 +25,7 @@ import {
   Panel,
   PriorityBadge,
   Ring,
-  Segmented,
-} from "@/components/kit";
+  Segmented, Linkify } from "@/components/kit";
 import { TaskCard, useStartTask } from "@/components/task-card";
 import { t } from "@/lib/i18n";
 import { ROLE_PERMISSIONS } from "@/lib/permissions";
@@ -288,7 +287,7 @@ function HeroTask({
       </div>
       <h3 className="display mt-3 text-3xl text-balance">{task.title}</h3>
       <p className="mt-2 text-sm leading-relaxed text-paper/65">
-        {task.description}
+        <Linkify text={task.description} />
       </p>
       <div className="mt-3">
         <Meta task={task} now={now} />
@@ -464,7 +463,7 @@ function FocusMode({
           {t("Instructions")}
         </p>
         <p className="mt-1.5 text-sm leading-relaxed text-paper/80">
-          {task.description}
+          <Linkify text={task.description} />
         </p>
       </div>
 

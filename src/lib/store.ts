@@ -296,10 +296,11 @@ export async function enableBrowserNotifications(): Promise<boolean> {
   return (await Notification.requestPermission()) === "granted";
 }
 
-function notifyBrowser(title: string, body: string, tag: string) {
+function notifyBrowser(title: string, body: string, tag: string, link?: string | null) {
   try {
     if (typeof Notification !== "undefined" && Notification.permission === "granted" && document.hidden) {
-      new Notification(title, { body, tag, icon: "/icon.svg" });
+      const n = new Notification(title, { body, tag, icon: "/icon.svg" });
+      if (link) n.onclick = () => window.open(link, "_blank", "noopener");
     }
   } catch {
     // Some phones only allow notifications from an installed app.
@@ -342,8 +343,13 @@ function announce(db: Database) {
     s.add(k);
     changed = true;
     if (Date.now() - r.at > 6 * 60 * 60_000) continue; // stale: shown in the bell only
-    toast(r.title, { description: r.note || undefined, duration: 10000 });
-    notifyBrowser(r.title, r.note, r.id);
+    const link = r.reminder?.link;
+    toast(r.title, {
+      description: r.note || undefined,
+      duration: link ? 30000 : 10000,
+      action: link ? { label: t("Open post"), onClick: () => window.open(link, "_blank", "noopener") } : undefined,
+    });
+    notifyBrowser(r.title, r.note, r.id, link);
   }
   if (changed) saveSeen();
 }
@@ -542,6 +548,8 @@ export const actions = {
   },
   setPersonActive: (id: string, active: boolean) =>
     commit((db, a) => venue.setPersonActive(db, a, id, active), active ? "Person reactivated." : "Person deactivated."),
+  saveInstagramWatch: (input: Parameters<typeof venue.saveInstagramWatch>[3]) =>
+    commit((db, a, now) => venue.saveInstagramWatch(db, a, now, input), "Instagram alerts saved."),
   addDepartment: (name: string, parentId: string | null = null) =>
     commit((db, a) => venue.addDepartment(db, a, name, parentId), parentId ? "Section added." : "Department added."),
   renameDepartment: (id: string, name: string) => commit((db, a) => venue.renameDepartment(db, a, id, name), "Name saved."),

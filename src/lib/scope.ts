@@ -90,6 +90,7 @@ type Row = { id: string };
 export function mergeInto(full: Database, before: Database, after: Database): Database {
   const next: Database = { ...full };
   if (after.workspace !== before.workspace) next.workspace = after.workspace;
+  if (after.instagram !== before.instagram) next.instagram = after.instagram;
   for (const c of COLLECTIONS) {
     const a = (before[c] ?? []) as Row[];
     const b = (after[c] ?? []) as Row[];

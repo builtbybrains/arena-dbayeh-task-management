@@ -436,3 +436,23 @@ export function Loader({ label = t("Loading Arena OS") }: { label?: string }) {
     </div>
   );
 }
+
+/** Plain text with web addresses turned into links (e.g. an Instagram post in a task). */
+export function Linkify({ text }: { text: string }) {
+  const parts = text.split(/(https?:\/\/[^\s]+)/g);
+  return (
+    <>
+      {parts.map((p, n) =>
+        /^https?:\/\//.test(p) ? (
+          <a key={n} href={p} target="_blank" rel="noopener noreferrer" className="break-all text-brand underline underline-offset-2">
+            {p}
+          </a>
+        ) : (
+          <span key={n} className="whitespace-pre-line">
+            {p}
+          </span>
+        ),
+      )}
+    </>
+  );
+}

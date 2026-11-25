@@ -668,6 +668,11 @@ function Alerts({ me }: { me: User }) {
                       {r.note && <span className="block text-xs text-paper/60">{r.note}</span>}
                       <span className="tnum block text-[11px] text-paper/45">{fmtAgo(r.at, now)}</span>
                     </button>
+                    {r.reminder?.link && (
+                      <a href={r.reminder.link} target="_blank" rel="noopener noreferrer" className="inline-flex h-8 shrink-0 items-center rounded-full bg-brand px-3 text-xs font-bold text-ink">
+                        {t("Open post")}
+                      </a>
+                    )}
                     {r.reminder && (
                       <Btn size="sm" variant="subtle" onClick={() => actions.dismissReminder(r.id)}>
                         {t("Done")}

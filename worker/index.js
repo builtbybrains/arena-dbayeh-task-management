@@ -10,6 +10,7 @@
 // read and write. Move to Supabase (see README) before using it for real.
 
 import ASSETS from "./assets.gen.js";
+import { checkInstagram, handleInstagram } from "./instagram.js";
 
 const MAX_BATCH = 400;
 const COLLECTIONS = new Set([
@@ -90,6 +91,7 @@ async function reset(db, request) {
   if (Number(body.epoch) !== meta.epoch) return json({ error: "Out of date", ...meta }, 409);
   await db.batch([
     db.prepare("DELETE FROM records"),
+    db.prepare("DELETE FROM meta WHERE k LIKE 'ig_%'"),
     db.prepare("UPDATE meta SET v = CAST(v AS INTEGER) + 1 WHERE k = 'epoch'"),
     db.prepare("UPDATE meta SET v = '0' WHERE k = 'rev'"),
   ]);
@@ -124,6 +126,10 @@ function serveAsset(url) {
 }
 
 export default {
+  // Cron trigger (wrangler.jsonc): check the watched Instagram page.
+  async scheduled(_event, env, ctx) {
+    ctx.waitUntil(checkInstagram(env.DB));
+  },
   async fetch(request, env) {
     const url = new URL(request.url);
     if (!url.pathname.startsWith("/api/")) return serveAsset(url);
@@ -132,6 +138,7 @@ export default {
       if (url.pathname === "/api/sync" && request.method === "GET") return await pull(env.DB, url);
       if (url.pathname === "/api/sync" && request.method === "POST") return await push(env.DB, request);
       if (url.pathname === "/api/reset" && request.method === "POST") return await reset(env.DB, request);
+      if (url.pathname.startsWith("/api/instagram/")) return await handleInstagram(request, env, url, CORS);
       return json({ error: "Not found" }, 404);
     } catch (e) {
       return json({ error: String(e?.message ?? e) }, 500);

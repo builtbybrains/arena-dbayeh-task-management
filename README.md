@@ -34,6 +34,11 @@ The Operations Manager runs the **Operations** department (cleaning, maintenance
 - **Recurring tasks**: daily, weekly (chosen days) or monthly. Each one creates its task in the person's queue on the right day.
 - **Reports by date**: today, yesterday, this week, last 7 days, this month, last month or any range. Includes tasks per person, events, walk-ins (busiest day and hour, by area) and revenue (door + event packages + restaurant + other). Export to CSV or print / PDF. The original task reports and the daily submission chain (manager → Operations Manager → Owner) are under **Task reports**.
 
+- **Venues**: Arena and Money Mondo share the app but are run separately. Owners switch between them at the top, and the date reports can combine both. Everyone else, including each venue's Operations Manager, only ever sees their own venue.
+- **Sections**: a department can sit under another one. Arena's Operations has a section (placeholder name "Christian", renamable under Team → People and PINs) with its own manager.
+- **Deadlines**: anyone who manages a task can move its deadline until it is done. Once it is overdue, only the person who created it can; everyone above sees an overdue alert naming who that is.
+- **Instagram alerts** (Settings): every 3 minutes the server checks a page (by default @quatro.dbayeh) through Instagram's official API. On a new post, the chosen people get an alert with an **Open post** button, and one person can also get a "like and repost" task. Instagram offers no way for apps to like or repost, so a person does that part. Setup: connect once with a Meta access token (the steps are in the panel). The token stays on the server (`meta` table) and is never sent to phones. Code: `worker/instagram.js`.
+
 ## First day with the real workspace
 
 1. Open the link and tap **Open the Arena workspace**. On the very first visit you set up the Owner: name and a 4-digit PIN.
@@ -47,7 +52,7 @@ The Operations Manager runs the **Operations** department (cleaning, maintenance
 There is no server application or paid database. The free Cloudflare plan hosts:
 
 - **The app**: a static Next.js export, bundled into one Cloudflare Worker.
-- **A tiny sync API**, `worker/index.js` (about 150 lines). It stores every record (person, task, event, walk-in…) as a JSON row in **Cloudflare D1** (free tier: 5 GB, 100,000 writes a day).
+- **A tiny sync API**, `worker/index.js`, plus the Instagram watcher in `worker/instagram.js` (run by a free cron trigger every 3 minutes). It stores every record (person, task, event, walk-in…) as a JSON row in **Cloudflare D1** (free tier: 5 GB, 100,000 writes a day).
 
 Each phone sends only the records it changed and asks every 8 seconds for anything changed since its last check (`src/lib/repository.ts`). If two people change the **same** record at the same moment, the later save wins. Changes made offline are queued and sent when the connection returns.
 

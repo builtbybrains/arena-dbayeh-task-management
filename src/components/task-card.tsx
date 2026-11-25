@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { Fragment, useState, type ReactNode } from "react";
-import { Avatar, Btn, EASE, PriorityBadge, StatusBadge } from "@/components/kit";
+import { Avatar, Btn, EASE, PriorityBadge, StatusBadge, Linkify } from "@/components/kit";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { t } from "@/lib/i18n";
 import {
@@ -319,7 +319,7 @@ function TaskDetails({ task, siblings }: { task: Task; siblings?: string[] }) {
 
   return (
     <div className="space-y-4 border-t border-white/8 p-4 ps-5">
-      <p className="text-sm leading-relaxed text-paper/75">{task.description}</p>
+      <p className="text-sm leading-relaxed text-paper/75"><Linkify text={task.description} /></p>
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
         {[
