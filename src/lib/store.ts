@@ -14,6 +14,7 @@ import { idx } from "./selectors";
 import { dateKey } from "./time";
 import type { Database, EventStatus, Priority, RevenueEntry, User, Workspace } from "./types";
 import { dueReminders } from "./venue";
+import { ARENA, mergeInto, scopeDb, userVenue, venuesOf } from "./scope";
 
 /** "workspace" is the real, shared Arena data; "sample" is the fictional demo. */
 export type Mode = "workspace" | "sample";
@@ -28,6 +29,8 @@ interface AppState {
   mode: Mode | null;
   db: Database | null;
   userId: string | null;
+  /** The venue an Owner is looking at; everyone else is fixed to their own. */
+  venue: string;
   switchingTo: string | null;
   effects: "auto" | "off";
 }
@@ -37,9 +40,12 @@ export const useApp = create<AppState>(() => ({
   mode: null,
   db: null,
   userId: null,
+  venue: ARENA,
   switchingTo: null,
   effects: "auto",
 }));
+
+const VENUE_KEY = "arena-os-venue-v1";
 
 let repo: DataRepository = sampleRepository;
 let cloud: ReturnType<typeof createCloudRepository> | null = null;
@@ -127,7 +133,7 @@ let unsubscribe: (() => void) | null = null;
 export function boot() {
   if (useApp.getState().ready) return;
   const effects: AppState["effects"] = read("local", PREFS_KEY) === "off" ? "off" : "auto";
-  useApp.setState({ effects });
+  useApp.setState({ effects, venue: read("local", VENUE_KEY) || ARENA });
   const mode = read("local", MODE_KEY) as Mode | null;
   if (mode === "sample" || mode === "workspace") void enterMode(mode);
   else useApp.setState({ ready: true, mode: null, db: null, userId: null });
@@ -141,12 +147,12 @@ export function boot() {
   }
 }
 
-/** Time-driven writes: overdue / over-time alerts and today's recurring tasks. */
+/** Time-driven writes: overdue / over-time alerts, today's recurring tasks, venue structure. */
 function tick() {
   const cur = useApp.getState().db;
   if (!cur || cur.users.length === 0) return;
   const now = Date.now();
-  const next = venue.generateRecurring(engine.syncAlerts(cur, now), now);
+  const next = venue.ensureStructure(venue.generateRecurring(engine.syncAlerts(cur, now), now));
   if (next !== cur) {
     useApp.setState({ db: next });
     repo.save(next, cur);
@@ -400,14 +406,40 @@ export async function eraseWorkspace(): Promise<boolean> {
 
 // --- Hooks -------------------------------------------------------------------
 
-/** The database. Only call below the app shell, which waits for it to load. */
+/** Which venue someone works in right now: their own, or the one an Owner picked. */
+export function activeVenue(db: Database, user: User | undefined, picked: string): string {
+  if (!user) return ARENA;
+  const own = userVenue(user);
+  if (own) return own;
+  return venuesOf(db).some((v) => v.id === picked) ? picked : ARENA;
+}
+
+/** Everything the signed-in person may see, limited to their venue. Only call below the app shell. */
 export function useDb(): Database {
+  const db = useApp((s) => s.db);
+  const userId = useApp((s) => s.userId);
+  const picked = useApp((s) => s.venue);
+  if (!db) throw new Error("Arena OS data has not loaded yet.");
+  const me = userId ? idx(db).userById.get(userId) : undefined;
+  return scopeDb(db, activeVenue(db, me, picked));
+}
+
+/** Both venues at once. For Owners only (combined reports). */
+export function useAllVenuesDb(): Database {
   const db = useApp((s) => s.db);
   if (!db) throw new Error("Arena OS data has not loaded yet.");
   return db;
 }
 
-/** The signed-in demo profile. */
+export const useVenueId = () => useDb().scope_venue ?? ARENA;
+
+/** Owners: switch the venue on screen. */
+export function setVenue(id: string) {
+  write("local", VENUE_KEY, id);
+  useApp.setState({ venue: id });
+}
+
+/** The signed-in person. */
 export function useMe(): User {
   const db = useDb();
   const id = useApp((s) => s.userId);
@@ -426,7 +458,10 @@ function commit(change: (db: Database, actor: User, now: number) => Database, su
     return false;
   }
   try {
-    const next = change(db, actor, Date.now());
+    // The action runs on the actor's venue only; its changes are merged back.
+    const slice = scopeDb(db, activeVenue(db, actor, useApp.getState().venue));
+    const changed = change(slice, actor, Date.now());
+    const next = changed === slice ? db : mergeInto(db, slice, changed);
     if (next !== db) {
       touchClock(false);
       useApp.setState({ db: next });
@@ -507,7 +542,9 @@ export const actions = {
   },
   setPersonActive: (id: string, active: boolean) =>
     commit((db, a) => venue.setPersonActive(db, a, id, active), active ? "Person reactivated." : "Person deactivated."),
-  addDepartment: (name: string) => commit((db, a) => venue.addDepartment(db, a, name), "Department added."),
+  addDepartment: (name: string, parentId: string | null = null) =>
+    commit((db, a) => venue.addDepartment(db, a, name, parentId), parentId ? "Section added." : "Department added."),
+  renameDepartment: (id: string, name: string) => commit((db, a) => venue.renameDepartment(db, a, id, name), "Name saved."),
   updateWorkspace: (change: Partial<Pick<Workspace, "name" | "walkin_price_kid" | "walkin_price_adult">>) =>
     commit((db, a) => venue.updateWorkspace(db, a, change), "Settings saved."),
 };

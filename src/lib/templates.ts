@@ -46,6 +46,13 @@ export const TEMPLATES: Record<string, TaskTemplate[]> = {
     t("Prepare for peak service hours", "Brief the team, pre-set tables and check reservations before the rush.", 30, "Service"),
     t("Check kids' menu stock", "Confirm stock for every kids' menu item and flag shortages.", 15, "Stock"),
   ],
+  christian: [
+    t("Open the gates and check the cameras", "Unlock the entrances, test every camera and the recording screen.", 20, "Security"),
+    t("Patrol the venue", "Walk every zone, the parking and the back doors; report anything unusual.", 30, "Security"),
+    t("Check fire extinguishers and exits", "Make sure extinguishers are in place and every emergency exit is clear.", 25, "Safety"),
+    t("Manage the entrance at peak time", "Stay at the main entrance during the rush and keep the queue moving.", 60, "Security"),
+    t("Lock up and set the alarm", "Check every zone is empty, lock all doors and set the alarm.", 25, "Closing"),
+  ],
   playground: [
     t("Open and inspect the play areas", "Walk every play zone before doors open: nets, padding, slides and soft floor.", 30, "Opening"),
     t("Check trampolines and inflatables", "Inspect springs, nets, anchors and air pressure before the first session.", 25, "Safety"),

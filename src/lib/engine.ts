@@ -5,6 +5,7 @@
 import {
   canAssign,
   canDelegate,
+  canEditDue,
   canEscalate,
   canManageTask,
   canRunTimer,
@@ -13,6 +14,7 @@ import {
   isBeneath,
 } from "./permissions";
 import { departmentSnapshot, elapsedSeconds, executiveSnapshot, idx } from "./selectors";
+import { ARENA, venueHere } from "./scope";
 import { iso, ms } from "./time";
 import type { ActivityAction, Database, Priority, Task, TaskActivityLog, TaskTimeSession, User } from "./types";
 
@@ -256,7 +258,17 @@ export function updateTask(
   change: Partial<Pick<Task, "title" | "description" | "due_at" | "estimated_duration" | "category" | "internal_notes">>,
 ): Database {
   const task = getTask(db, taskId);
-  if (!canManageTask(db, actor, task)) fail("You are not allowed to edit this task.");
+  const onlyDue = Object.keys(change).every((k) => k === "due_at");
+  if (change.due_at !== undefined && change.due_at !== task.due_at) {
+    if (!canEditDue(db, actor, task, now)) {
+      fail(
+        task.status === "completed"
+          ? "This task is done; its deadline can no longer change."
+          : "This task is overdue. Only the person who created it can change the deadline.",
+      );
+    }
+  }
+  if (!onlyDue && !canManageTask(db, actor, task)) fail("You are not allowed to edit this task.");
   if (change.title !== undefined && change.title.trim().length < 3) fail("Give the task a title.");
   if (change.due_at !== undefined && Number.isNaN(ms(change.due_at))) fail("Set a valid due date and time.");
   return {
@@ -343,6 +355,7 @@ export function submitExecutiveReport(db: Database, actor: User, now: number, da
   const existing = db.executive_reports.find((r) => r.report_date === date);
   const report = {
     id: existing?.id ?? uid("er"),
+    venue_id: venueHere(db),
     report_date: date,
     submitted_by: actor.id,
     submitted_at: iso(now),
@@ -356,7 +369,7 @@ export function submitExecutiveReport(db: Database, actor: User, now: number, da
     executive_reports: existing
       ? db.executive_reports.map((r) => (r.id === existing.id ? report : r))
       : [...db.executive_reports, report],
-    logs: [...db.logs, entry(now, null, actor.id, "report_submitted", null, "executive")],
+    logs: [...db.logs, entry(now, null, actor.id, "report_submitted", null, venueHere(db) === ARENA ? "executive" : `executive:${venueHere(db)}`)],
   };
 }
 

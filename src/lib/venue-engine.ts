@@ -14,6 +14,7 @@ import {
   isBeneath,
   remindableUsers,
 } from "./permissions";
+import { ARENA, isOpsDept, MONDO, venueHere, venuesOf } from "./scope";
 import { idx } from "./selectors";
 import { addDays, beirutToUtc, dateKey, iso, ms } from "./time";
 import type {
@@ -41,11 +42,40 @@ const count = (n: number) => Math.max(0, Math.round(Number(n) || 0));
 
 // --- Workspace and people ---------------------------------------------------
 
-export const DEFAULT_DEPARTMENTS: Omit<Department, "manager_id">[] = [
-  { id: "ops", name: "Operations", short: "OPS", description: "Opening, cleaning, maintenance and the daily floor.", display_order: 0 },
-  { id: "restaurant", name: "Restaurant", short: "F&B", description: "Quatro restaurant: kitchen, waiters and service.", display_order: 1 },
-  { id: "playground", name: "Playground", short: "PLAY", description: "Play areas, entry desk, safety and kids' activities.", display_order: 2 },
+/** Sections under Arena's Operations. The name is a placeholder the Owner can rename. */
+const SECTIONS: Omit<Department, "manager_id">[] = [
+  { id: "christian", name: "Christian", short: "SEC", description: "Security and support, under Operations.", display_order: 3, venue_id: ARENA, parent_id: "ops" },
 ];
+
+export const DEFAULT_DEPARTMENTS: Omit<Department, "manager_id">[] = [
+  { id: "ops", name: "Operations", short: "OPS", description: "Opening, cleaning, maintenance and the daily floor.", display_order: 0, venue_id: ARENA, is_ops: true },
+  { id: "restaurant", name: "Restaurant", short: "F&B", description: "Quatro restaurant: kitchen, waiters and service.", display_order: 1, venue_id: ARENA },
+  { id: "playground", name: "Playground", short: "PLAY", description: "Play areas, entry desk, safety and kids' activities.", display_order: 2, venue_id: ARENA },
+  ...SECTIONS,
+];
+
+/** Money Mondo starts with its own Operations department; the Owners add the rest. */
+const MONDO_DEPARTMENTS: Omit<Department, "manager_id">[] = [
+  { id: "mondo-ops", name: "Operations", short: "OPS", description: "Money Mondo's daily operations.", display_order: 10, venue_id: MONDO, is_ops: true },
+];
+
+/**
+ * Brings an existing workspace up to date: both venues, Money Mondo's
+ * Operations department and the sections under Arena's Operations. Fixed ids
+ * make this safe to run on every phone.
+ */
+export function ensureStructure(db: Database): Database {
+  if (!db.workspace || db.users.length === 0) return db;
+  const venues = db.venues ?? [];
+  const missingVenues = venuesOf(db).filter((v) => !venues.some((x) => x.id === v.id));
+  const missingDepts = [...SECTIONS, ...MONDO_DEPARTMENTS].filter((d) => !db.departments.some((x) => x.id === d.id));
+  if (missingVenues.length === 0 && missingDepts.length === 0) return db;
+  return {
+    ...db,
+    venues: [...venues, ...missingVenues.map((v) => (v.id === ARENA ? { ...v, name: db.workspace?.name?.replace(/\s*Dbayeh$/i, "") || v.name } : v))],
+    departments: [...db.departments, ...missingDepts.map((d) => ({ ...d, manager_id: null }))],
+  };
+}
 
 /** First run of a real workspace: the Owner and the three departments. */
 export function setupWorkspace(db: Database, now: number, input: { name: string; ownerId: string; ownerName: string; pinHash: string }): Database {
@@ -78,7 +108,8 @@ export function setupWorkspace(db: Database, now: number, input: { name: string;
     ...db,
     workspace,
     users: [owner],
-    departments: DEFAULT_DEPARTMENTS.map((d) => ({ ...d, manager_id: null })),
+    venues: [],
+    departments: [...DEFAULT_DEPARTMENTS, ...MONDO_DEPARTMENTS].map((d) => ({ ...d, manager_id: null })),
     restaurants: [{ id: "quatro", name: "Quatro Restaurant", department_id: "restaurant", description: "Main dining room.", display_order: 0 }],
   };
 }
@@ -86,6 +117,20 @@ export function setupWorkspace(db: Database, now: number, input: { name: string;
 export function updateWorkspace(db: Database, actor: User, change: Partial<Pick<Workspace, "name" | "walkin_price_kid" | "walkin_price_adult">>): Database {
   if (actor.role !== "owner" && actor.role !== "ops") fail("Only the Owner or Operations Manager can change venue settings.");
   if (!db.workspace) fail("Set up the workspace first.");
+  const here = venueHere(db);
+  if (here !== ARENA && (change.walkin_price_kid !== undefined || change.walkin_price_adult !== undefined)) {
+    // Each venue other than Arena keeps its own entry prices.
+    const list = venuesOf(db).map((v) =>
+      v.id === here
+        ? {
+            ...v,
+            walkin_price_kid: change.walkin_price_kid !== undefined ? money(change.walkin_price_kid) : v.walkin_price_kid,
+            walkin_price_adult: change.walkin_price_adult !== undefined ? money(change.walkin_price_adult) : v.walkin_price_adult,
+          }
+        : v,
+    );
+    return { ...db, venues: list };
+  }
   return {
     ...db,
     workspace: {
@@ -119,14 +164,15 @@ function managerFor(db: Database, role: Role, deptId: string | null, selfId: str
   return dept?.manager_id && dept.manager_id !== selfId ? dept.manager_id : (ops?.id ?? owner?.id ?? null);
 }
 
-/** Re-point every department's manager and everyone's reporting line. */
+/** Re-point every department's manager and everyone's reporting line (within one venue). */
 function rewire(db: Database): Database {
   const departments = db.departments.map((d) => {
     const m =
-      d.id === "ops"
+      isOpsDept(d)
         ? db.users.find((u) => u.role === "ops" && u.active_status)
         : db.users.find((u) => u.role === "manager" && u.department_id === d.id && u.active_status);
-    return { ...d, manager_id: m?.id ?? null };
+    const manager_id = m?.id ?? null;
+    return manager_id === d.manager_id ? d : { ...d, manager_id };
   });
   const next = { ...db, departments };
   const users = db.users.map((u) => {
@@ -142,10 +188,13 @@ export function savePerson(db: Database, actor: User, now: number, input: Person
   if (actor.role !== "owner" && ROLE_RANK[input.role] <= ROLE_RANK[actor.role]) fail("You can only add people below you.");
   const name = input.name.trim();
   if (name.length < 2) fail("Enter a name.");
-  if (input.role === "owner" && existing?.role !== "owner") fail("There is only one Owner.");
+  if (input.role === "owner" && actor.role !== "owner") fail("Only an Owner can add another Owner.");
+  if (existing?.role === "owner" && input.role !== "owner") fail("An Owner stays an Owner.");
   const dept = input.role === "ops" || input.role === "owner" ? null : input.department_id;
   if ((input.role === "manager" || input.role === "employee") && !dept) fail("Choose a department.");
-  if (input.role === "manager" && dept === "ops") fail("The Operations Manager runs Operations. Pick Restaurant or Playground.");
+  if (dept && !db.departments.some((d) => d.id === dept)) fail("Choose a department.");
+  if (input.role === "manager" && db.departments.some((d) => d.id === dept && isOpsDept(d)))
+    fail("The Operations Manager runs Operations. Pick another department or section.");
   if (input.role === "manager" && db.users.some((u) => u.role === "manager" && u.department_id === dept && u.active_status && u.id !== existing?.id))
     fail("This department already has a manager.");
   if (input.role === "ops" && db.users.some((u) => u.role === "ops" && u.active_status && u.id !== existing?.id))
@@ -184,6 +233,8 @@ export function savePerson(db: Database, actor: User, now: number, input: Person
       pin_hash: input.pin_hash ?? null,
       phone: input.phone?.trim() || null,
       created_at: iso(now),
+      venue_id: input.role === "owner" ? null : venueHere(db),
+      created_by: actor.id,
     };
     users = [...db.users, person];
   }
@@ -200,21 +251,36 @@ export function setPersonActive(db: Database, actor: User, userId: string, activ
   return rewire({ ...db, users: db.users.map((x) => (x.id === userId ? { ...x, active_status: active } : x)) });
 }
 
-export function addDepartment(db: Database, actor: User, name: string): Database {
+export function addDepartment(db: Database, actor: User, name: string, parentId: string | null = null): Database {
   if (actor.role !== "owner" && actor.role !== "ops") fail("Only the Owner or Operations Manager can add departments.");
   const clean = name.trim();
   if (clean.length < 2) fail("Enter a department name.");
   if (db.departments.some((d) => d.name.toLowerCase() === clean.toLowerCase())) fail("This department already exists.");
-  const id = clean.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 24) || uid("d");
+  if (parentId && !db.departments.some((d) => d.id === parentId)) fail("Choose a department.");
+  const here = venueHere(db);
+  const slug = clean.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 24);
+  // Ids are unique across venues, so anything outside Arena gets the venue as a prefix.
+  const id = slug ? (here === ARENA ? slug : `${here}-${slug}`) : uid("d");
   const dept: Department = {
-    id: db.departments.some((d) => d.id === id) ? uid("d") : id,
+    id: db.departments.some((d) => d.id === id) || id === "ops" ? uid("d") : id,
     name: clean,
     short: clean.slice(0, 5).toUpperCase(),
     manager_id: null,
     description: "",
-    display_order: db.departments.length,
+    display_order: db.departments.length + 10,
+    venue_id: here,
+    parent_id: parentId,
   };
   return { ...db, departments: [...db.departments, dept] };
+}
+
+export function renameDepartment(db: Database, actor: User, id: string, name: string): Database {
+  if (actor.role !== "owner" && actor.role !== "ops") fail("Only the Owner or Operations Manager can rename departments.");
+  const clean = name.trim();
+  if (clean.length < 2) fail("Enter a department name.");
+  if (db.departments.some((d) => d.id !== id && d.name.toLowerCase() === clean.toLowerCase())) fail("This department already exists.");
+  if (!db.departments.some((d) => d.id === id)) fail("This department no longer exists.");
+  return { ...db, departments: db.departments.map((d) => (d.id === id ? { ...d, name: clean, short: clean.slice(0, 5).toUpperCase() } : d)) };
 }
 
 // --- Events -------------------------------------------------------------------
@@ -306,6 +372,7 @@ export function createEvent(db: Database, actor: User, now: number, input: Event
     id: uid("ev"),
     ...eventFields(input),
     status: input.status ?? "booked",
+    venue_id: venueHere(db),
     created_by: actor.id,
     created_at: iso(now),
     updated_at: iso(now),
@@ -411,7 +478,7 @@ export function logWalkIn(db: Database, actor: User, now: number, input: WalkInI
   if (kids + adults === 0) fail("Add at least one person.");
   if (kids + adults > 500) fail("That is more people than the venue holds. Check the numbers.");
   const at = input.at && !Number.isNaN(ms(input.at)) ? input.at : iso(now);
-  const w: WalkIn = { id: uid("w"), at, kids, adults, area: input.area, amount: money(input.amount), note: (input.note ?? "").trim(), logged_by: actor.id, deleted_at: null };
+  const w: WalkIn = { id: uid("w"), at, kids, adults, area: input.area, amount: money(input.amount), note: (input.note ?? "").trim(), logged_by: actor.id, deleted_at: null, venue_id: venueHere(db) };
   return { ...db, walkins: [...db.walkins, w] };
 }
 
@@ -425,11 +492,16 @@ export function removeWalkIn(db: Database, actor: User, now: number, id: string)
 export function setRevenue(db: Database, actor: User, now: number, date: string, source: RevenueEntry["source"], amount: number, note = ""): Database {
   if (!canEnterRevenue(actor)) fail("Only managers can enter revenue.");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) fail("Pick a date.");
-  const id = `${date}_${source}`;
-  const row: RevenueEntry = { id, date, source, amount: money(amount), note: note.trim(), entered_by: actor.id, updated_at: iso(now) };
+  const here = venueHere(db);
+  const id = revenueId(here, date, source);
+  const row: RevenueEntry = { id, date, source, amount: money(amount), note: note.trim(), entered_by: actor.id, updated_at: iso(now), venue_id: here };
   const exists = db.revenue.some((r) => r.id === id);
   return { ...db, revenue: exists ? db.revenue.map((r) => (r.id === id ? row : r)) : [...db.revenue, row] };
 }
+
+/** One revenue figure per venue, day and source. Arena keeps the original ids. */
+export const revenueId = (venueId: string, date: string, source: RevenueEntry["source"]) =>
+  venueId === ARENA ? `${date}_${source}` : `${venueId}_${date}_${source}`;
 
 // --- Reminders ------------------------------------------------------------------
 

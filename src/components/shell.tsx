@@ -45,13 +45,17 @@ import {
   leaveMode,
   resetDemo,
   signOut,
+  setVenue,
   switchProfile,
   syncNow,
+  useAllVenuesDb,
   useApp,
   useDb,
   useMe,
   useNow,
+  useVenueId,
 } from "@/lib/store";
+import { ARENA, venueName, venueOf, venuesOf } from "@/lib/scope";
 import { dateKey, fmtAgo, fmtKeyLong, fmtTime } from "@/lib/time";
 import type { User } from "@/lib/types";
 import { closeDemo, openDemo, showOnBoard, useUi, type BoardQuick } from "@/lib/ui";
@@ -257,6 +261,7 @@ function TopBar({ me }: { me: User }) {
         </p>
       </div>
       <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-2">
+        <VenueSwitch me={me} />
         <button
           type="button"
           onClick={() => useUi.setState({ walkIn: true })}
@@ -295,6 +300,40 @@ function TopBar({ me }: { me: User }) {
         </button>
       </div>
     </header>
+  );
+}
+
+/** Owners flip between Arena and Money Mondo; everyone else sees which venue they are in. */
+function VenueSwitch({ me }: { me: User }) {
+  const full = useAllVenuesDb();
+  const current = useVenueId();
+  const venues = venuesOf(full);
+  if (me.role !== "owner") {
+    if (current === ARENA) return null;
+    return (
+      <span className="hidden h-8 items-center rounded-full border border-med/40 bg-med/10 px-3 text-[11px] font-bold tracking-[0.1em] text-med uppercase sm:flex">
+        {venueName(full, current)}
+      </span>
+    );
+  }
+  return (
+    <div className="glass flex h-10 items-center rounded-full p-1" role="group" aria-label={t("Venue")}>
+      {venues.map((v) => (
+        <button
+          key={v.id}
+          type="button"
+          onClick={() => setVenue(v.id)}
+          aria-pressed={current === v.id}
+          className={cn(
+            "h-8 rounded-full px-2.5 text-xs font-bold whitespace-nowrap transition sm:px-3",
+            current === v.id ? "bg-med text-ink" : "text-paper/60 hover:text-paper",
+          )}
+        >
+          <span className="sm:hidden">{v.id === ARENA ? "A" : v.name.split(" ").map((w) => w[0]).join("")}</span>
+          <span className="hidden sm:inline">{v.name}</span>
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -429,21 +468,22 @@ function Row({ icon, label, children }: { icon: ReactNode; label: string; childr
 /** Demo-only profile switcher and reset. Not an authentication system. */
 function DemoControls() {
   const open = useUi((s) => s.demoOpen);
-  const db = useDb();
   const me = useMe();
   const router = useRouter();
   const [confirm, setConfirm] = useState(false);
 
+  const full = useAllVenuesDb();
+  // The sample switcher lists every profile in both venues.
   const groups = useMemo(() => {
-    const exec = db.users.filter((u) => u.role === "owner" || u.role === "ops");
+    const exec = full.users.filter((u) => u.role === "owner" || u.role === "ops");
     return [
       { label: t("Leadership"), users: exec },
-      ...db.departments.map((d) => ({
-        label: t(d.name),
-        users: db.users.filter((u) => u.department_id === d.id).sort((a, b) => (a.role === "manager" ? -1 : b.role === "manager" ? 1 : 0)),
+      ...full.departments.map((d) => ({
+        label: venueOf(d) === ARENA ? t(d.name) : `${venueName(full, venueOf(d))} · ${t(d.name)}`,
+        users: full.users.filter((u) => u.department_id === d.id).sort((a, b) => (a.role === "manager" ? -1 : b.role === "manager" ? 1 : 0)),
       })),
-    ];
-  }, [db.users, db.departments]);
+    ].filter((g) => g.users.length > 0);
+  }, [full]);
 
   return (
     <Dialog

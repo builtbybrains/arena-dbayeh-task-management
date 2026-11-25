@@ -22,6 +22,7 @@ import {
   assignableUsers,
   canEscalate,
   canDelegate,
+  canEditDue,
   canManageTask,
   delegateTargets,
   canRunTimer,
@@ -29,7 +30,7 @@ import {
 } from "@/lib/permissions";
 import { elapsedSeconds, idx, isOverdue, overTimeSeconds, taskLogs } from "@/lib/selectors";
 import { actions, useDb, useMe, useNow } from "@/lib/store";
-import { fmtAgo, fmtClock, fmtDay, fmtDue, fmtDuration, fmtTime } from "@/lib/time";
+import { dateKey, fmtAgo, fmtClock, fmtDay, fmtDue, fmtDuration, fmtTime, fromInputs, timeInputValue } from "@/lib/time";
 import { PRIORITIES, PRIORITY_COLOR, PRIORITY_LABEL, type Task } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -230,6 +231,43 @@ export function TaskCard({
   );
 }
 
+/**
+ * Move a deadline. Anyone who manages the task can while it is on time; once
+ * it is overdue only its creator can, and everyone else sees who that is.
+ */
+function DueEditor({ task }: { task: Task }) {
+  const db = useDb();
+  const me = useMe();
+  const now = useNow();
+  const [date, setDate] = useState(() => dateKey(task.due_at));
+  const [time, setTime] = useState(() => timeInputValue(Date.parse(task.due_at)));
+  const overdue = Date.parse(task.due_at) < now;
+  const creator = idx(db).userById.get(task.assigned_by)?.name ?? t("the creator");
+  if (!canEditDue(db, me, task, now)) {
+    if (!overdue) return null;
+    return (
+      <p className="flex items-start gap-2 rounded-xl border border-crit/30 bg-crit/8 p-3 text-xs text-paper/80">
+        <CalendarClock className="mt-px size-3.5 shrink-0 text-crit" />
+        {t("This task is overdue. Only {name} can change its deadline.", { name: creator })}
+      </p>
+    );
+  }
+  const changed = fromInputs(date, time) !== task.due_at;
+  return (
+    <div className="space-y-2 rounded-2xl border border-white/8 bg-white/[0.025] p-3">
+      <p className="text-[11px] font-semibold tracking-[0.14em] text-paper/45 uppercase">{t("Deadline")}</p>
+      {overdue && <p className="text-xs text-crit">{t("Overdue. As the person who created it, you can set a new deadline.")}</p>}
+      <div className="flex flex-wrap gap-2">
+        <input type="date" className="field w-auto flex-1" value={date} onChange={(e) => setDate(e.target.value)} aria-label={t("Due date")} />
+        <input type="time" className="field w-auto" value={time} onChange={(e) => setTime(e.target.value)} aria-label={t("Due time")} />
+        <Btn variant={changed ? "primary" : "ghost"} disabled={!changed || !date || !time} onClick={() => actions.updateTask(task.id, { due_at: fromInputs(date, time) })}>
+          {t("Save deadline")}
+        </Btn>
+      </div>
+    </div>
+  );
+}
+
 /** For a manager who received a task: hand it to someone on their team. */
 function PassOn({ task }: { task: Task }) {
   const db = useDb();
@@ -313,6 +351,8 @@ function TaskDetails({ task, siblings }: { task: Task; siblings?: string[] }) {
       {canRunTimer(me, task) && <TimerControls task={task} />}
 
       {canDelegate(me, task) && <PassOn task={task} />}
+
+      {task.status !== "completed" && <DueEditor task={task} />}
 
       {manage && (
         <div className="space-y-3 rounded-2xl border border-white/8 bg-white/[0.025] p-3">

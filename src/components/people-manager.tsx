@@ -10,11 +10,13 @@ import { Avatar, Btn, Chip, Empty, Panel } from "@/components/kit";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { t } from "@/lib/i18n";
 import { canManagePerson } from "@/lib/permissions";
-import { actions, useApp, useDb, useMe } from "@/lib/store";
+import { actions, useAllVenuesDb, useApp, useDb, useMe, useVenueId } from "@/lib/store";
+import { isOpsDept, venueName } from "@/lib/scope";
 import { ROLE_LABEL, ROLE_RANK, type Role, type User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const TITLES: Record<string, string[]> = {
+  christian: ["Security Guard", "Security Supervisor", "Parking Attendant", "Driver"],
   ops: ["Maintenance Technician", "Cleaner", "Cleaning Supervisor", "Security", "Driver"],
   restaurant: ["Waiter", "Cook", "Chef", "Barista", "Cashier", "Kitchen Helper"],
   playground: ["Playground Attendant", "Entry Desk Cashier", "Kids Animator", "Lifeguard", "Party Host"],
@@ -27,15 +29,25 @@ export function PeopleManager() {
   const [editing, setEditing] = useState<User | "new" | null>(null);
   const [showInactive, setShowInactive] = useState(false);
   const [newDept, setNewDept] = useState("");
+  const [underOps, setUnderOps] = useState(false);
+  const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
+  const venueId = useVenueId();
+  const full = useAllVenuesDb();
+  const opsDept = db.departments.find(isOpsDept);
 
   const groups = useMemo(() => {
     const list = db.users.filter((u) => u.active_status !== showInactive);
     const leaders = list.filter((u) => u.role === "owner" || u.role === "ops");
+    // Sections are listed right after the department they sit under.
+    const top = db.departments.filter((d) => !d.parent_id).sort((a, b) => a.display_order - b.display_order);
+    const ordered = top.flatMap((d) => [d, ...db.departments.filter((x) => x.parent_id === d.id)]);
+    for (const d of db.departments) if (!ordered.includes(d)) ordered.push(d);
     return [
-      { id: "lead", name: t("Leadership"), users: leaders },
-      ...db.departments.map((d) => ({
+      { id: "lead", name: t("Leadership"), parent: null as string | null, users: leaders },
+      ...ordered.map((d) => ({
         id: d.id,
         name: t(d.name),
+        parent: d.parent_id ? (db.departments.find((x) => x.id === d.parent_id)?.name ?? null) : null,
         users: list
           .filter((u) => u.department_id === d.id && u.role !== "ops")
           .sort((a, b) => ROLE_RANK[a.role] - ROLE_RANK[b.role] || a.name.localeCompare(b.name)),
@@ -46,7 +58,7 @@ export function PeopleManager() {
   const missing = [
     !db.users.some((u) => u.role === "ops" && u.active_status) && t("an Operations Manager"),
     ...db.departments
-      .filter((d) => d.id !== "ops" && !d.manager_id)
+      .filter((d) => !isOpsDept(d) && !d.manager_id)
       .map((d) => t("a manager for {dept}", { dept: t(d.name) })),
   ].filter(Boolean) as string[];
 
@@ -70,10 +82,15 @@ export function PeopleManager() {
             className="ms-auto flex gap-2"
             onSubmit={(e) => {
               e.preventDefault();
-              if (actions.addDepartment(newDept)) setNewDept("");
+              if (actions.addDepartment(newDept, underOps && opsDept ? opsDept.id : null)) setNewDept("");
             }}
           >
-            <input className="field h-10 w-44 py-0" placeholder={t("New department")} value={newDept} onChange={(e) => setNewDept(e.target.value)} aria-label={t("New department")} />
+            <input className="field h-10 w-44 py-0" placeholder={underOps ? t("New section") : t("New department")} value={newDept} onChange={(e) => setNewDept(e.target.value)} aria-label={t("New department")} />
+            {opsDept && (
+              <Chip active={underOps} onClick={() => setUnderOps((v) => !v)}>
+                {t("Under Operations")}
+              </Chip>
+            )}
             <Btn type="submit" disabled={newDept.trim().length < 2}>
               <Plus className="size-4" /> {t("Add")}
             </Btn>
@@ -82,11 +99,26 @@ export function PeopleManager() {
       </div>
       <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
         {groups.map((g) => (
-          <Panel key={g.id} title={g.name}>
+          <Panel
+            key={g.id}
+            title={
+              <span className="flex flex-col">
+                {g.name}
+                {g.parent && <span className="text-[11px] font-semibold tracking-wider text-paper/45 normal-case">{t("Section under {dept}", { dept: t(g.parent) })}</span>}
+              </span>
+            }
+            right={
+              g.id !== "lead" && (me.role === "owner" || me.role === "ops") ? (
+                <Btn size="sm" variant="subtle" onClick={() => setRenaming({ id: g.id, name: db.departments.find((d) => d.id === g.id)?.name ?? "" })} aria-label={t("Rename")}>
+                  <Pencil className="size-3.5" /> {t("Rename")}
+                </Btn>
+              ) : undefined
+            }
+          >
             {g.users.length === 0 ? (
               <Empty
                 title={t("No one yet")}
-                hint={showInactive ? undefined : g.id === "ops" ? t("The Operations Manager runs this department. Add cleaners, maintenance and drivers here.") : t("Use “Add person” to add someone here.")}
+                hint={showInactive ? undefined : opsDept?.id === g.id ? t("The Operations Manager runs this department. Add cleaners, maintenance and drivers here.") : t("Use “Add person” to add someone here.")}
               />
             ) : (
               <ul className="space-y-2">
@@ -117,6 +149,29 @@ export function PeopleManager() {
           </Panel>
         ))}
       </div>
+      <Dialog open={renaming !== null} onOpenChange={(o) => !o && setRenaming(null)}>
+        <DialogContent className="glass-solid block rounded-3xl p-5 sm:max-w-sm">
+          <DialogTitle className="display text-2xl">{t("Rename")}</DialogTitle>
+          <DialogDescription className="mt-1 text-sm text-paper/55">{t("The new name shows everywhere: lists, tasks and reports.")}</DialogDescription>
+          {renaming && (
+            <form
+              className="mt-4 flex gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (actions.renameDepartment(renaming.id, renaming.name)) setRenaming(null);
+              }}
+            >
+              <input className="field" value={renaming.name} onChange={(e) => setRenaming({ ...renaming, name: e.target.value })} aria-label={t("Name")} autoFocus />
+              <Btn variant="primary" type="submit">
+                {t("Save")}
+              </Btn>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+      {me.role === "owner" && (
+        <p className="text-xs text-paper/45">{t("You are looking at {venue}. People you add here belong to {venue}; switch venue at the top to manage the other team.", { venue: venueName(full, venueId) })}</p>
+      )}
       <Dialog open={editing !== null} onOpenChange={(o) => !o && setEditing(null)}>
         <DialogContent className="glass-solid block max-h-[92dvh] overflow-y-auto rounded-3xl p-0 sm:max-w-lg">
           {editing && <PersonForm person={editing === "new" ? null : editing} onDone={() => setEditing(null)} />}
@@ -130,17 +185,17 @@ function PersonForm({ person, onDone }: { person: User | null; onDone: () => voi
   const db = useDb();
   const me = useMe();
   const sample = useApp((s) => s.mode === "sample");
-  const roles: Role[] = (["ops", "manager", "employee"] as Role[]).filter((r) => me.role === "owner" || ROLE_RANK[r] > ROLE_RANK[me.role]);
+  const roles: Role[] = (["owner", "ops", "manager", "employee"] as Role[]).filter((r) => (me.role === "owner" ? true : ROLE_RANK[r] > ROLE_RANK[me.role]));
   const hasOps = db.users.some((u) => u.role === "ops" && u.active_status && u.id !== person?.id);
   const [name, setName] = useState(person?.name ?? "");
   const [role, setRole] = useState<Role>(person?.role ?? (hasOps || me.role !== "owner" ? "employee" : "ops"));
-  const [dept, setDept] = useState(person?.department_id ?? db.departments.find((d) => d.id !== "ops")?.id ?? "");
+  const [dept, setDept] = useState(person?.department_id ?? db.departments.find((d) => !isOpsDept(d))?.id ?? db.departments[0]?.id ?? "");
   const [title, setTitle] = useState(person?.title ?? "");
   const [phone, setPhone] = useState(person?.phone ?? "");
   const [pin, setPin] = useState("");
   const [busy, setBusy] = useState(false);
   const isOwner = person?.role === "owner";
-  const depts = db.departments.filter((d) => role !== "manager" || d.id !== "ops");
+  const depts = db.departments.filter((d) => role !== "manager" || !isOpsDept(d));
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -176,7 +231,7 @@ function PersonForm({ person, onDone }: { person: User | null; onDone: () => voi
           <Field label={t("Position")}>
             <div className="flex flex-wrap gap-1.5">
               {roles.map((r) => (
-                <Chip key={r} active={role === r} onClick={() => setRole(r)} disabled={r === "ops" && hasOps}>
+                <Chip key={r} active={role === r} onClick={() => setRole(r)} disabled={(r === "ops" && hasOps) || (r === "owner" && !!person)}>
                   {t(ROLE_LABEL[r])}
                 </Chip>
               ))}

@@ -11,6 +11,8 @@ import { actions, useDb, useMe, useNow } from "@/lib/store";
 import { addDays, beirutHour, dateKey, fmtKeyLong, fmtTime, ms } from "@/lib/time";
 import { AREA_LABEL } from "@/lib/types";
 import { useUi } from "@/lib/ui";
+import { ARENA, venuePrices } from "@/lib/scope";
+import { revenueId } from "@/lib/venue-engine";
 import { cn } from "@/lib/utils";
 import { eventsOnDay, fmtMoney, fmtParty, people, walkInsInRange, walkInTotals } from "@/lib/venue";
 
@@ -124,7 +126,7 @@ export default function WalkInsPage() {
 function RevenuePanel({ day, doorTotal }: { day: string; doorTotal: number }) {
   const db = useDb();
   const me = useMe();
-  const find = (source: "restaurant" | "other") => db.revenue.find((r) => r.id === `${day}_${source}`);
+  const find = (source: "restaurant" | "other") => db.revenue.find((r) => r.id === revenueId(db.scope_venue ?? ARENA, day, source));
   const [rest, setRest] = useState(find("restaurant")?.amount ?? 0);
   const [other, setOther] = useState(find("other")?.amount ?? 0);
   const [note, setNote] = useState(find("other")?.note ?? "");
@@ -185,8 +187,9 @@ function RevenuePanel({ day, doorTotal }: { day: string; doorTotal: number }) {
 function PricesPanel() {
   const db = useDb();
   const ws = db.workspace;
-  const [kid, setKid] = useState(ws?.walkin_price_kid ?? 0);
-  const [adult, setAdult] = useState(ws?.walkin_price_adult ?? 0);
+  const price = venuePrices(db, db.scope_venue ?? ARENA);
+  const [kid, setKid] = useState(price.kid);
+  const [adult, setAdult] = useState(price.adult);
   if (!ws) return null;
   return (
     <Panel title={t("Entry prices")} icon={<Settings2 className="size-5" />}>

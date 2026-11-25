@@ -22,6 +22,8 @@ export interface User {
   active_status: boolean;
   pin_hash: string | null; // SHA-256 of the 4-digit PIN; null in sample mode
   phone?: string | null;
+  venue_id?: string | null; // Arena or Money Mondo; Owners have none (they see every venue). Missing = Arena.
+  created_by?: string | null; // who added this account
   created_at: string;
 }
 
@@ -32,6 +34,18 @@ export interface Department {
   manager_id: string | null; // null until the Owner adds its manager
   description: string;
   display_order: number;
+  venue_id?: string; // missing = Arena
+  is_ops?: boolean; // the venue's Operations department, run by its Operations Manager
+  parent_id?: string | null; // a section that sits under another department (e.g. under Operations)
+}
+
+/** A business the Owners run: Arena, Money Mondo. Each has its own team and numbers. */
+export interface Venue {
+  id: string;
+  name: string;
+  display_order: number;
+  walkin_price_kid?: number;
+  walkin_price_adult?: number;
 }
 
 /** A restaurant outlet inside the restaurants department, with its own waiters. */
@@ -164,6 +178,7 @@ export interface ExecutiveSnapshot {
 
 export interface ExecutiveReport {
   id: string;
+  venue_id?: string; // missing = Arena
   report_date: string;
   submitted_by: string;
   submitted_at: string;
@@ -194,6 +209,7 @@ export interface VenueEvent {
   deposit: number; // USD already paid
   notes: string;
   owner_id: string | null; // person in charge on the day
+  venue_id?: string; // missing = Arena
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -210,12 +226,14 @@ export interface WalkIn {
   note: string;
   logged_by: string;
   deleted_at: string | null;
+  venue_id?: string; // missing = Arena
 }
 
 /** Revenue typed in by a manager for one business day and one source. */
 export interface RevenueEntry {
-  id: string; // `${date}_${source}` so a day has one figure per source
+  id: string; // `${date}_${source}` for Arena, `${venue}_${date}_${source}` elsewhere: one figure per day and source
   date: string; // Beirut business date
+  venue_id?: string; // missing = Arena
   source: "restaurant" | "other"; // door money and event packages are counted from walk-ins and events
   amount: number; // USD
   note: string;
@@ -272,7 +290,10 @@ export interface Workspace {
 export interface Database {
   version: number;
   seeded_at: string;
+  /** Set on a venue's slice of the data (see scope.ts); never stored. */
+  scope_venue?: string;
   workspace: Workspace | null;
+  venues: Venue[];
   users: User[];
   departments: Department[];
   restaurants: Restaurant[];
@@ -290,6 +311,7 @@ export interface Database {
 
 /** The record collections that sync, in the order they load. */
 export const COLLECTIONS = [
+  "venues",
   "users",
   "departments",
   "restaurants",

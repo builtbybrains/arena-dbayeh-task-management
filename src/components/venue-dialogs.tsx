@@ -21,6 +21,7 @@ import {
   PRIORITIES,
   PRIORITY_LABEL,
   type Area,
+  type Database,
   type EventKind,
   type EventStatus,
   type Priority,
@@ -30,6 +31,7 @@ import {
   type VenueEvent,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { isOpsDept } from "@/lib/scope";
 import type { PrepTaskInput } from "@/lib/venue-engine";
 import { eventTasks, fmtMoney } from "@/lib/venue";
 
@@ -39,7 +41,12 @@ const STATUSES: EventStatus[] = ["booked", "confirmed", "done", "cancelled"];
 export const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 /** Department whose people usually handle an area. */
-const areaDept = (a: Area) => (a === "restaurant" ? "restaurant" : a === "playground" ? "playground" : "ops");
+/** The department in this venue whose people usually handle an area (Operations if none matches). */
+function areaDeptIn(db: Database, a: Area): string {
+  const want = a === "restaurant" ? "restaurant" : a === "playground" ? "playground" : null;
+  const match = want ? db.departments.find((d) => d.id === want || d.id.endsWith(`-${want}`)) : undefined;
+  return (match ?? db.departments.find(isOpsDept) ?? db.departments[0])?.id ?? "ops";
+}
 
 function Footer({ children }: { children: React.ReactNode }) {
   return <div className="sticky bottom-0 flex flex-wrap items-center gap-2 border-t border-white/10 bg-[#0b0f0d] p-4">{children}</div>;
@@ -104,13 +111,13 @@ export function EventForm({ event, date, onDone }: { event: VenueEvent | null; d
   const [deposit, setDeposit] = useState(event?.deposit ?? 0);
   const [notes, setNotes] = useState(event?.notes ?? "");
   const defaultOwner = () => {
-    const dept = areaDept(area);
+    const dept = areaDeptIn(db, area);
     const m = db.departments.find((d) => d.id === dept)?.manager_id;
     return people.some((u) => u.id === m) ? m! : me.id;
   };
   const [owner, setOwner] = useState(event?.owner_id ?? defaultOwner());
 
-  const team = people.filter((u) => u.role === "employee" && (u.department_id === areaDept(area) || area === "whole_venue"));
+  const team = people.filter((u) => u.role === "employee" && (u.department_id === areaDeptIn(db, area) || area === "whole_venue"));
   const firstStaff = (team[0] ?? people.find((u) => u.id !== me.id) ?? me).id;
   const [prep, setPrep] = useState<PrepRow[]>(() => [
     { on: true, title: t("Prepare the area"), offset: -60, after: false, est: 40, assigned_to: firstStaff },
@@ -233,7 +240,7 @@ export function EventForm({ event, date, onDone }: { event: VenueEvent | null; d
         return {
           title: `${p.title.trim()} · ${title.trim()}`,
           description: t("For the event “{title}” ({kids} kids, {adults} adults).", { title: title.trim(), kids, adults }),
-          department_id: to?.department_id ?? areaDept(area),
+          department_id: to?.department_id ?? areaDeptIn(db, area),
           assigned_to: p.assigned_to,
           due_at: new Date(base + p.offset * MIN).toISOString(),
           estimated_duration: p.est,
@@ -477,7 +484,7 @@ export function RecurringForm({ rule, onDone }: { rule: RecurringTask | null; on
       {
         title,
         description,
-        department_id: person?.department_id ?? "ops",
+        department_id: person?.department_id ?? db.departments.find(isOpsDept)?.id ?? "ops",
         assigned_to: assignee,
         priority,
         repeat,

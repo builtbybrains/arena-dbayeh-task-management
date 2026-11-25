@@ -4,6 +4,7 @@
 
 import type { Database, Role, Task, User, WalkIn } from "./types";
 import { ROLE_RANK } from "./types";
+import { userVenue } from "./scope";
 
 export const isExec = (u: User) => u.role === "owner";
 export const isCompanyWide = (u: User) => u.role === "owner" || u.role === "ops";
@@ -14,6 +15,8 @@ export const isCompanyWide = (u: User) => u.role === "owner" || u.role === "ops"
  */
 export function isBeneath(actor: User, target: User): boolean {
   if (ROLE_RANK[target.role] <= ROLE_RANK[actor.role]) return false;
+  // Arena and Money Mondo are run separately: only the Owners reach across.
+  if (actor.role !== "owner" && userVenue(actor) !== userVenue(target)) return false;
   return actor.role !== "manager" || target.department_id === actor.department_id;
 }
 
@@ -89,13 +92,25 @@ export function delegateTargets(db: Database, actor: User): User[] {
   return db.users.filter((u) => u.active_status && isBeneath(actor, u));
 }
 
+/**
+ * Change a task's deadline. Any task that is not done can be rescheduled by
+ * whoever manages it; once it is overdue, only the person who created it can
+ * move the deadline (everyone else, the Owner included, just sees the alert).
+ */
+export function canEditDue(db: Database, actor: User, t: Task, now: number): boolean {
+  if (t.deleted_at || t.status === "completed") return false;
+  if (t.assigned_by === actor.id) return true;
+  if (Date.parse(t.due_at) < now) return false;
+  return canManageTask(db, actor, t);
+}
+
 export const canRunTimer = (actor: User, t: Task) => !t.deleted_at && t.assigned_to === actor.id;
 export const canEscalate = (actor: User, t: Task) =>
   actor.role === "manager" && t.department_id === actor.department_id && t.status !== "completed";
 export const canSeeInternalNotes = (actor: User) => actor.role !== "employee";
 export const canSubmitDepartmentReport = (actor: User, deptId: string) =>
   (actor.role === "manager" && actor.department_id === deptId) ||
-  (actor.role === "ops" && deptId === "ops");
+  (actor.role === "ops" && /(^|-)ops$/.test(deptId));
 export const canSubmitExecutiveReport = (actor: User) => actor.role === "ops";
 export const canViewReports = (actor: User) => actor.role !== "employee";
 
@@ -112,7 +127,7 @@ export const canManageRecurring = (actor: User) => actor.role !== "employee";
 export function canManagePerson(actor: User, target: User | null): boolean {
   if (actor.role === "owner") return true;
   if (actor.role !== "ops") return false;
-  return !target || ROLE_RANK[target.role] > ROLE_RANK.ops;
+  return !target || (ROLE_RANK[target.role] > ROLE_RANK.ops && userVenue(target) === userVenue(actor));
 }
 export const canManagePeople = (actor: User) => actor.role === "owner" || actor.role === "ops";
 export const canEraseWorkspace = (actor: User) => actor.role === "owner";
@@ -195,7 +210,7 @@ export const ROLE_PERMISSIONS: Record<Role, string[]> = {
     "Adds people, sets their PINs and reviews all reports",
   ],
   ops: [
-    "Runs daily operations across the whole venue",
+    "Runs daily operations for their own venue only",
     "Passes tasks on to managers and staff",
     "Books events and submits the daily report to the Owner",
   ],

@@ -435,6 +435,22 @@ export function attentionItems(db: Database, now: number, deptIds?: string[]): A
         task_id: t.id,
         department_id: t.department_id,
       });
+    } else if (late) {
+      // Every overdue task raises an alert; only its creator may move the deadline.
+      out.push({
+        id: `od-${t.id}`,
+        kind: "overdue",
+        severity: "warning",
+        title: t.title,
+        detail: tr("Overdue by {time}. {name} is assigned. Only {creator} can change the deadline.", {
+          time: fmtDuration((now - ms(t.due_at)) / 1000),
+          name: name(t.assigned_to),
+          creator: name(t.assigned_by),
+        }),
+        task_id: t.id,
+        department_id: t.department_id,
+        user_id: t.assigned_to ?? undefined,
+      });
     }
     if (!t.assigned_to && (t.priority === "critical" || t.priority === "high")) {
       out.push({
@@ -663,7 +679,7 @@ function describe(db: Database, log: TaskActivityLog): FeedEntry {
       break;
     case "report_submitted":
       text =
-        log.new_value === "executive"
+        log.new_value?.startsWith("executive")
           ? tr("submitted the consolidated daily venue report")
           : tr("submitted the {dept} daily report", { dept: tr(i.deptById.get(log.new_value ?? "")?.name ?? "department") });
       tone = "info";

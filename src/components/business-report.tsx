@@ -6,12 +6,13 @@
 import { CalendarRange, DoorOpen, Download, PartyPopper, Printer, Users, Wallet } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Btn, Chip, Empty, PageHeader, Panel, Stat } from "@/components/kit";
+import { Btn, Chip, Empty, PageHeader, Panel, Segmented, Stat } from "@/components/kit";
 import { downloadCsv, rangeSlug, toMinutes, toPercent, type CsvRows } from "@/lib/export";
 import { t } from "@/lib/i18n";
 import { canSeeRevenue } from "@/lib/permissions";
 import { idx } from "@/lib/selectors";
-import { useDb, useMe, useNow } from "@/lib/store";
+import { useAllVenuesDb, useDb, useMe, useNow } from "@/lib/store";
+import { ARENA, venueName } from "@/lib/scope";
 import { addDays, dateKey, fmtDay, fmtDuration, fmtKey, fmtKeyShort, fmtTime } from "@/lib/time";
 import { AREA_LABEL, EVENT_KIND_COLOR, EVENT_KIND_LABEL, EVENT_STATUS_LABEL } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -43,7 +44,10 @@ function presetRange(p: Preset, today: string): { from: string; to: string } {
 }
 
 export function BusinessReportView() {
-  const db = useDb();
+  const venueDb = useDb();
+  const full = useAllVenuesDb();
+  const [both, setBoth] = useState(false);
+  const db = both ? full : venueDb;
   const me = useMe();
   const now = useNow();
   const today = dateKey(now);
@@ -120,6 +124,18 @@ export function BusinessReportView() {
       </PageHeader>
 
       <div className="no-print mb-5 flex flex-wrap items-center gap-1.5">
+        {me.role === "owner" && (
+          <Segmented
+            id="report-venue"
+            className="me-2"
+            value={both ? "both" : "one"}
+            onChange={(v) => setBoth(v === "both")}
+            options={[
+              { value: "one", label: venueName(full, venueDb.scope_venue ?? ARENA) },
+              { value: "both", label: t("Both venues") },
+            ]}
+          />
+        )}
         <CalendarRange className="me-1 size-4 text-brand" />
         {presets.map(([p, label]) => (
           <Chip key={p} active={preset === p} onClick={() => setPreset(p)}>

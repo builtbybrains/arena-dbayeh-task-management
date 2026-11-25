@@ -13,7 +13,7 @@ import ASSETS from "./assets.gen.js";
 
 const MAX_BATCH = 400;
 const COLLECTIONS = new Set([
-  "meta", "users", "departments", "restaurants", "tasks", "sessions", "logs",
+  "meta", "venues", "users", "departments", "restaurants", "tasks", "sessions", "logs",
   "daily_reports", "executive_reports", "events", "walkins", "revenue",
   "reminders", "recurring",
 ]);

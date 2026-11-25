@@ -27,6 +27,7 @@ export function emptyDb(version: number): Database {
     version,
     seeded_at: new Date().toISOString(),
     workspace: null,
+    venues: [],
     users: [],
     departments: [],
     restaurants: [],
@@ -125,7 +126,7 @@ export function diff(prev: Database | null, next: Database): WireRecord[] {
   }
   for (const c of COLLECTIONS) {
     const a = prev?.[c] as { id: string }[] | undefined;
-    const b = next[c] as { id: string }[];
+    const b = (next[c] ?? []) as { id: string }[];
     if (a === b) continue;
     const before = new Map((a ?? []).map((x) => [x.id, x]));
     for (const item of b) if (before.get(item.id) !== item) out.push({ c, id: item.id, d: JSON.stringify(item) });
@@ -156,7 +157,7 @@ function apply(db: Database, records: WireRecord[], skip: Set<string>): Database
     m.set(r.id, value);
   }
   for (const [c, m] of touched) {
-    const list = (db[c] as { id: string }[]).map((x) => {
+    const list = ((db[c] ?? []) as { id: string }[]).map((x) => {
       const v = m.get(x.id);
       if (v === undefined) return x;
       m.delete(x.id);

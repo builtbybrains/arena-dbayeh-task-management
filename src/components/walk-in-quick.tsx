@@ -9,6 +9,7 @@ import { Stepper } from "@/components/forms";
 import { Btn, Chip } from "@/components/kit";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { t } from "@/lib/i18n";
+import { ARENA, venuePrices } from "@/lib/scope";
 import { actions, useDb, useNow } from "@/lib/store";
 import { dateKey } from "@/lib/time";
 import { AREA_LABEL, type Area } from "@/lib/types";
@@ -28,14 +29,14 @@ export function WalkInQuick() {
 
 function WalkInForm() {
   const db = useDb();
-  const prices = db.workspace ?? { walkin_price_kid: 0, walkin_price_adult: 0 };
+  const price = venuePrices(db, db.scope_venue ?? ARENA);
   const [kids, setKids] = useState(1);
   const [adults, setAdults] = useState(1);
   const [area, setArea] = useState<Area>("playground");
   const [amount, setAmount] = useState<number | null>(null); // null = use the price list
   const [note, setNote] = useState("");
   const [saved, setSaved] = useState(0);
-  const auto = area === "playground" ? kids * prices.walkin_price_kid + adults * prices.walkin_price_adult : 0;
+  const auto = area === "playground" ? kids * price.kid + adults * price.adult : 0;
   const paid = amount ?? auto;
   const today = dateKey(useNow());
   const todayPeople = liveWalkIns(db)
