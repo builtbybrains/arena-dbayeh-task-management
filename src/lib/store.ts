@@ -14,7 +14,7 @@ import { idx } from "./selectors";
 import { dateKey } from "./time";
 import type { Database, EventStatus, Priority, RevenueEntry, User, Workspace } from "./types";
 import { dueReminders } from "./venue";
-import { ARENA, mergeInto, scopeDb, userVenue, venuesOf } from "./scope";
+import { ARENA, forViewer, mergeInto, scopeDb, userVenue, venuesOf } from "./scope";
 
 /** "workspace" is the real, shared Arena data; "sample" is the fictional demo. */
 export type Mode = "workspace" | "sample";
@@ -427,14 +427,17 @@ export function useDb(): Database {
   const picked = useApp((s) => s.venue);
   if (!db) throw new Error("Arena OS data has not loaded yet.");
   const me = userId ? idx(db).userById.get(userId) : undefined;
-  return scopeDb(db, activeVenue(db, me, picked));
+  const slice = scopeDb(db, activeVenue(db, me, picked));
+  return me ? forViewer(slice, me) : slice;
 }
 
 /** Both venues at once. For Owners only (combined reports). */
 export function useAllVenuesDb(): Database {
   const db = useApp((s) => s.db);
+  const userId = useApp((s) => s.userId);
   if (!db) throw new Error("Arena OS data has not loaded yet.");
-  return db;
+  const me = userId ? idx(db).userById.get(userId) : undefined;
+  return me ? forViewer(db, me) : db;
 }
 
 export const useVenueId = () => useDb().scope_venue ?? ARENA;

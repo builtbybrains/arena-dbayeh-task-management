@@ -4,6 +4,7 @@
 // venues. Every screen reads a "scoped" copy of the database built here, so
 // the filtering lives in one place.
 
+import { canSeePrivate } from "./permissions";
 import { COLLECTIONS, type Database, type Department, type User, type Venue } from "./types";
 
 export const ARENA = "arena";
@@ -109,4 +110,29 @@ export function mergeInto(full: Database, before: Database, after: Database): Da
     (next as unknown as Record<string, unknown>)[c] = list;
   }
   return next;
+}
+
+const viewerCache = new WeakMap<Database, Map<string, Database>>();
+
+/** A venue slice with the private owner-to-owner work this person may not see taken out. */
+export function forViewer(db: Database, user: User): Database {
+  let byUser = viewerCache.get(db);
+  if (!byUser) viewerCache.set(db, (byUser = new Map()));
+  const hit = byUser.get(user.id);
+  if (hit) return hit;
+  const owners = new Set(db.users.filter((u) => u.role === "owner").map((u) => u.id));
+  const hidden = new Set(db.tasks.filter((t) => !canSeePrivate(user, t, owners)).map((t) => t.id));
+  const hiddenRules = db.recurring.filter((r) => !canSeePrivate(user, r, owners));
+  const out =
+    hidden.size === 0 && hiddenRules.length === 0
+      ? db
+      : {
+          ...db,
+          tasks: db.tasks.filter((t) => !hidden.has(t.id)),
+          sessions: db.sessions.filter((s) => !hidden.has(s.task_id)),
+          logs: db.logs.filter((l) => !l.task_id || !hidden.has(l.task_id)),
+          recurring: db.recurring.filter((r) => !hiddenRules.includes(r)),
+        };
+  byUser.set(user.id, out);
+  return out;
 }

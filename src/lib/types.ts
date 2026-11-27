@@ -78,6 +78,8 @@ export interface Task {
   deleted_at: string | null; // soft delete keeps historical reports intact
   event_id?: string | null; // prep / cleanup work for a booked event
   recurring_id?: string | null; // created by a recurring schedule
+  /** Owner-to-owner work: only these Owners see it (other Owners and venue staff do not). */
+  private_to?: string[] | null;
 }
 
 export interface TaskTimeSession {
@@ -283,6 +285,7 @@ export interface RecurringTask {
   due_time: string; // "HH:MM" Beirut
   estimated_duration: number; // minutes
   active: boolean;
+  private_to?: string[] | null; // owner-to-owner schedule, see Task.private_to
   created_by: string;
   created_at: string;
   deleted_at: string | null;

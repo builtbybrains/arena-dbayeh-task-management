@@ -67,6 +67,11 @@ export const TEMPLATES: Record<string, TaskTemplate[]> = {
   ],
 };
 
+/** Templates for a department in any venue: Money Mondo's "mondo-ops" uses the Operations ones, and so on. */
+export function templatesFor(deptId: string): TaskTemplate[] {
+  return TEMPLATES[deptId] ?? TEMPLATES[deptId.replace(/^[a-z0-9]+-/, "")] ?? [];
+}
+
 export const MANAGER_TEMPLATES: TaskTemplate[] = [
   t("Review team workload and rebalance the queue", "Check each team member's queue and move tasks where someone is overloaded.", 20, "Management"),
   t("Approve next week's roster", "Review the draft roster against bookings and approve or adjust it.", 25, "Management"),

@@ -52,6 +52,7 @@ export const VENUES: Record<string, string> = {
   Closing: "الإغلاق",
   Safety: "السلامة",
   "Open post": "فتح المنشور",
+  "Other Owners (private between you)": "المالكون الآخرون (خاص بينكم)",
   "Save alerts": "حفظ التنبيهات",
   "Instagram alerts": "تنبيهات إنستغرام",
   "Every 3 minutes Arena OS checks a page on Instagram. When it posts, the people below get an alert with a button to open the post, so they can like and repost it in a few seconds. Instagram does not let apps like or repost by themselves.":

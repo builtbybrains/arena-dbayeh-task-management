@@ -29,8 +29,25 @@ export function canViewDepartment(u: User, deptId: string): boolean {
   return isCompanyWide(u) || (u.role === "manager" && u.department_id === deptId);
 }
 
+/**
+ * Work between Owners is private: an Owner sees it only when they gave it or
+ * received it. Once it is passed down to a venue's team, that team (and its
+ * managers) see it as usual, but the other Owners still do not.
+ */
+export function canSeePrivate(u: User, t: { private_to?: string[] | null; assigned_to?: string | null }, ownerIds: Set<string>): boolean {
+  if (!t.private_to?.length) return true;
+  if (t.private_to.includes(u.id) || t.assigned_to === u.id) return true;
+  if (u.role === "owner") return false;
+  return !!t.assigned_to && !ownerIds.has(t.assigned_to);
+}
+
+/** Owners can hand work to each other (any venue). */
+export const isOwnerPeer = (actor: User, target: User) =>
+  actor.role === "owner" && target.role === "owner" && target.id !== actor.id && target.active_status;
+
 export function canViewTask(u: User, t: Task): boolean {
   if (t.deleted_at) return false;
+  if (t.private_to?.length && u.role === "owner" && !t.private_to.includes(u.id) && t.assigned_to !== u.id) return false;
   if (isCompanyWide(u)) return true;
   if (u.role === "manager") return t.department_id === u.department_id || t.assigned_to === u.id;
   return t.assigned_to === u.id;
@@ -59,8 +76,13 @@ export function assignableDepartmentIds(db: Database, actor: User): string[] {
 export function assignableUsers(db: Database, actor: User, deptId: string): User[] {
   if (actor.role === "manager" && actor.department_id !== deptId) return [];
   return db.users.filter(
-    (u) => u.active_status && isBeneath(actor, u) && (u.department_id === deptId || u.department_id === null),
+    (u) => u.active_status && (isBeneath(actor, u) || isOwnerPeer(actor, u)) && (u.department_id === deptId || u.department_id === null),
   );
+}
+
+/** Everyone a recurring task can be given to: yourself, anyone beneath you, and (for Owners) the other Owners. */
+export function scheduleTargets(db: Database, actor: User): User[] {
+  return db.users.filter((u) => u.active_status && (u.id === actor.id || isBeneath(actor, u) || isOwnerPeer(actor, u)));
 }
 
 export function canAssign(db: Database, actor: User, assigneeId: string, deptId: string): boolean {
@@ -74,6 +96,8 @@ export function canAssign(db: Database, actor: User, assigneeId: string, deptId:
  */
 export function canManageTask(db: Database, actor: User, t: Task): boolean {
   if (t.deleted_at || actor.role === "employee" || t.assigned_to === actor.id) return false;
+  // Private owner-to-owner work is managed by the Owners it was shared between.
+  if (t.private_to?.length && actor.role === "owner") return t.private_to.includes(actor.id);
   if (actor.role === "manager" && t.department_id !== actor.department_id) return false;
   if (!t.assigned_to) return true;
   const assignee = db.users.find((u) => u.id === t.assigned_to);
@@ -134,7 +158,7 @@ export const canEraseWorkspace = (actor: User) => actor.role === "owner";
 
 /** People a reminder can be sent to: yourself and anyone beneath you. */
 export function remindableUsers(db: Database, actor: User): User[] {
-  return db.users.filter((u) => u.active_status && (u.id === actor.id || isBeneath(actor, u)));
+  return db.users.filter((u) => u.active_status && (u.id === actor.id || isBeneath(actor, u) || isOwnerPeer(actor, u)));
 }
 
 export interface NavItem {

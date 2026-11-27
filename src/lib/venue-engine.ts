@@ -2,7 +2,7 @@
 // tasks, people and departments. Same rules as engine.ts: pure functions that
 // check permissions and return a new database.
 
-import { entry, fail, uid } from "./engine";
+import { entry, fail, ownerShare, uid } from "./engine";
 import {
   canEditWalkIn,
   canEnterRevenue,
@@ -12,6 +12,7 @@ import {
   canManagePerson,
   canManageRecurring,
   isBeneath,
+  isOwnerPeer,
   remindableUsers,
 } from "./permissions";
 import { ARENA, isOpsDept, MONDO, venueHere, venuesOf } from "./scope";
@@ -585,7 +586,7 @@ export function saveRecurring(db: Database, actor: User, now: number, input: Rec
   if (!canManageRecurring(actor)) fail("Only managers can set up recurring tasks.");
   if (input.title.trim().length < 3) fail("Give the task a title.");
   const to = idx(db).userById.get(input.assigned_to);
-  if (!to || !isBeneath(actor, to)) fail("Choose someone on your team.");
+  if (!to || !(to.id === actor.id || isBeneath(actor, to) || isOwnerPeer(actor, to))) fail("Choose someone on your team.");
   if (input.repeat === "weekly" && input.weekdays.length === 0) fail("Pick at least one day of the week.");
   if (!/^\d{2}:\d{2}$/.test(input.due_time)) fail("Set the time it is due.");
   if (!input.estimated_duration || input.estimated_duration <= 0) fail("Set the time allowed.");
@@ -600,6 +601,7 @@ export function saveRecurring(db: Database, actor: User, now: number, input: Rec
     month_day: Math.min(28, Math.max(1, Math.round(input.month_day) || 1)),
     due_time: input.due_time,
     estimated_duration: Math.round(input.estimated_duration),
+    private_to: ownerShare(db, actor, input.assigned_to, null),
   };
   if (id) {
     if (!db.recurring.some((r) => r.id === id && !r.deleted_at)) fail("This schedule no longer exists.");
@@ -668,6 +670,7 @@ export function generateRecurring(db: Database, now: number): Database {
       deleted_at: null,
       event_id: null,
       recurring_id: rule.id,
+      private_to: rule.private_to ?? null,
     });
     logs.push({ ...entry(now, id, rule.created_by, "assigned", null, rule.assigned_to), id: `rl_${rule.id}_${today}` });
   }

@@ -9,7 +9,7 @@ import { t } from "@/lib/i18n";
 import { assignableDepartmentIds, assignableUsers } from "@/lib/permissions";
 import { idx, queueFor } from "@/lib/selectors";
 import { actions, useDb, useMe } from "@/lib/store";
-import { TEMPLATES } from "@/lib/templates";
+import { templatesFor } from "@/lib/templates";
 import { addDays, beirutToUtc, dateKey, fmtDuration, fromInputs, MIN, timeInputValue } from "@/lib/time";
 import { PRIORITIES, PRIORITY_COLOR, PRIORITY_LABEL, type Priority, type User } from "@/lib/types";
 import { closeComposer, useUi, type ComposerPreset } from "@/lib/ui";
@@ -60,7 +60,7 @@ function ComposerForm({ preset }: { preset: ComposerPreset }) {
   const [deployed, setDeployed] = useState<string | null>(null);
 
   const people = useMemo(() => assignableUsers(db, me, dept), [db, me, dept]);
-  const templates = TEMPLATES[dept] ?? [];
+  const templates = templatesFor(dept);
 
   // Everyone beneath the assigner, grouped the way the venue is organised.
   const groups = useMemo(() => {
@@ -69,7 +69,11 @@ function ComposerForm({ preset }: { preset: ComposerPreset }) {
     const managers = people.filter((u) => u.department_id && u.role === "manager");
     const staff = people.filter((u) => u.role === "employee");
     const outlets = db.restaurants.filter((r) => r.department_id === dept);
-    if (leadership.length) out.push({ label: t("Leadership"), users: leadership });
+    // Owners first (private between Owners), then the Operations Manager.
+    const owners = leadership.filter((u) => u.role === "owner");
+    const ops = leadership.filter((u) => u.role !== "owner");
+    if (owners.length) out.push({ label: t("Other Owners (private between you)"), users: owners });
+    if (ops.length) out.push({ label: t("Leadership"), users: ops });
     if (managers.length) out.push({ label: t("Department manager"), users: managers });
     for (const r of outlets) {
       const waiters = staff.filter((u) => u.restaurant_id === r.id);

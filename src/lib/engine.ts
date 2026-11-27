@@ -76,6 +76,13 @@ function overTimeEntry(db: Database, task: Task, now: number, known?: Set<string
 
 const withAlert = (alert: TaskActivityLog | null) => (alert ? [alert] : []);
 
+/** Owner → Owner work stays between the Owners involved (see canSeePrivate). */
+export function ownerShare(db: Database, actor: User, assigneeId: string, current: string[] | null): string[] | null {
+  const to = db.users.find((u) => u.id === assigneeId);
+  if (actor.role !== "owner" || to?.role !== "owner") return current;
+  return [...new Set([...(current ?? []), actor.id, to.id])];
+}
+
 export interface NewTaskInput {
   title: string;
   description: string;
@@ -121,6 +128,7 @@ export function createTask(db: Database, actor: User, now: number, input: NewTas
     deleted_at: null,
     event_id: input.event_id ?? null,
     recurring_id: null,
+    private_to: ownerShare(db, actor, input.assigned_to, null),
   };
   return {
     ...db,
@@ -210,7 +218,12 @@ export function reassignTask(db: Database, actor: User, now: number, taskId: str
   return {
     ...db,
     // A running timer stops with the previous owner; their tracked time is kept.
-    tasks: patch(db, taskId, { assigned_to: userId, status: task.status === "in_progress" ? "paused" : task.status }, now),
+    tasks: patch(
+      db,
+      taskId,
+      { assigned_to: userId, status: task.status === "in_progress" ? "paused" : task.status, private_to: ownerShare(db, actor, userId, task.private_to ?? null) },
+      now,
+    ),
     sessions: closeOpen(db.sessions, taskId, now),
     logs: [...db.logs, entry(now, taskId, actor.id, "reassigned", task.assigned_to, userId)],
   };

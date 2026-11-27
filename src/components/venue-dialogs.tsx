@@ -9,7 +9,7 @@ import { Field, Money, Stepper, labelCls } from "@/components/forms";
 import { Avatar, Btn, Chip, StatusBadge } from "@/components/kit";
 import { DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { t } from "@/lib/i18n";
-import { canManageEvents, isBeneath, remindableUsers } from "@/lib/permissions";
+import { canManageEvents, isBeneath, remindableUsers, scheduleTargets } from "@/lib/permissions";
 import { idx, isOverdue } from "@/lib/selectors";
 import { actions, useDb, useMe, useNow } from "@/lib/store";
 import { addDays, beirutToUtc, dateKey, fmtDuration, fmtKey, fmtTime, fromInputs, MIN, ms, timeInputValue } from "@/lib/time";
@@ -63,12 +63,13 @@ function useAssignable(): User[] {
 }
 
 function PersonSelect({ value, onChange, people, label, allowNone }: { value: string; onChange: (id: string) => void; people: User[]; label: string; allowNone?: boolean }) {
+  const me = useMe();
   return (
     <select className="field" value={value} onChange={(e) => onChange(e.target.value)} aria-label={label}>
       {allowNone && <option value="">{t("No one yet")}</option>}
       {people.map((u) => (
         <option key={u.id} value={u.id}>
-          {u.name} · {t(u.title)}
+          {u.id === me.id ? t("Me") : u.name} · {t(u.title)}
         </option>
       ))}
     </select>
@@ -467,7 +468,8 @@ export function ReminderForm({ date, onDone }: { date: string; onDone: () => voi
 export function RecurringForm({ rule, onDone }: { rule: RecurringTask | null; onDone: () => void }) {
   const db = useDb();
   const me = useMe();
-  const people = useAssignable().filter((u) => u.id !== me.id);
+  // Yourself, your team, and for Owners the other Owners (kept private between you).
+  const people = useMemo(() => scheduleTargets(db, me).sort((a, b) => (a.id === me.id ? -1 : b.id === me.id ? 1 : a.name.localeCompare(b.name))), [db, me]);
   const [title, setTitle] = useState(rule?.title ?? "");
   const [description, setDescription] = useState(rule?.description ?? "");
   const [assignee, setAssignee] = useState(rule?.assigned_to ?? people[0]?.id ?? "");
